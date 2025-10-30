@@ -1,0 +1,5 @@
+line-length = 79
+target-version = "py311"
+
+[lint]
+extend-select = ["E501"]
