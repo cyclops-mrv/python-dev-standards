@@ -21,10 +21,7 @@ jobs:
       - name: Checkout shared config
         uses: actions/checkout@v4
         with:
-            repository: cyclops-mrv/python-dev-standards
-            token: ${{ secrets.PYTHON_DEV_STANDARDS_SYNC }}
-            path: .config
-
+          path: .config
 
       - name: Install tools
         run: pip install ruff mypy types-shapely types-geopandas
