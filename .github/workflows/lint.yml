@@ -7,9 +7,6 @@ on:
         required: false
         default: "3.11"
         type: string
-    secrets:
-      PYTHON_DEV_STANDARDS_SYNC:
-        required: true
 
 jobs:
   lint:
@@ -27,6 +24,7 @@ jobs:
             repository: cyclops-mrv/python-dev-standards
             token: ${{ secrets.PYTHON_DEV_STANDARDS_SYNC }}
             path: .config
+
 
       - name: Install tools
         run: pip install ruff mypy types-shapely types-geopandas
