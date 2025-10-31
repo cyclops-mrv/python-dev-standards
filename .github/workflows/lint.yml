@@ -1,5 +1,4 @@
 name: Lint
-
 on:
   workflow_call:
     inputs:
@@ -15,32 +14,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          token: ${{ secrets.personal_access_token }}  # Add this
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
-
       - name: Checkout shared config
         uses: actions/checkout@v4
         with:
+          repository: cyclops-mrv/python-dev-standards  # Add this
           path: .config
-
+          token: ${{ secrets.personal_access_token }}
       - name: Install tools
         run: pip install ruff mypy types-shapely types-geopandas
-
       - name: Get changed Python files
         id: changed
         uses: tj-actions/changed-files@v45
         with:
           files: |
             **/*.py
-
       - name: Run Ruff
         if: steps.changed.outputs.any_changed == 'true'
         run: |
           echo "${{ steps.changed.outputs.all_changed_files }}"
           ruff check ${{ steps.changed.outputs.all_changed_files }} --config .config/ruff.toml
-
       - name: Run Mypy
         if: steps.changed.outputs.any_changed == 'true'
         run: |
