@@ -5,29 +5,17 @@ repos:
     hooks:
       # Run the linter
       - id: ruff
-        args: [--fix]  # Automatically fix issues when possible
+        args: [--fix, --config, ruff.toml]
       # Run the formatter
       - id: ruff-format
+        args: [--config, ruff.toml]
 
   # Mypy - static type checker
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.13.0 
     hooks:
       - id: mypy
+        args: [--config-file, mypy.ini]
         additional_dependencies:
-          - types-requests
-          - types-pyyaml
-        # Suppress missing import errors for untyped libraries
-        args: [--ignore-missing-imports]
-
-  # Misc hooks
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-added-large-files
-        args: [--maxkb=1000]
-      - id: check-merge-conflict
-      - id: debug-statements
+          - types-shapely
+          - types-geopandas
