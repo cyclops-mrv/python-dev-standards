@@ -8,14 +8,12 @@ on:
         type: string
     secrets:
       personal_access_token:
-        required: true
+        required: false
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.personal_access_token }}  # Add this
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
@@ -24,7 +22,6 @@ jobs:
         with:
           repository: cyclops-mrv/python-dev-standards  # Add this
           path: .config
-          token: ${{ secrets.personal_access_token }}
       - name: Install tools
         run: pip install ruff mypy types-shapely types-geopandas
       - name: Get changed Python files
