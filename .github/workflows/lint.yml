@@ -14,8 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: .config
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python-version }}
@@ -31,9 +29,9 @@ jobs:
         if: steps.changed.outputs.any_changed == 'true'
         run: |
           echo "${{ steps.changed.outputs.all_changed_files }}"
-          ruff check ${{ steps.changed.outputs.all_changed_files }} --config .config/ruff.toml
+          ruff check ${{ steps.changed.outputs.all_changed_files }} --config ruff.toml
       - name: Run Mypy
         if: steps.changed.outputs.any_changed == 'true'
         run: |
           echo "${{ steps.changed.outputs.all_changed_files }}"
-          mypy ${{ steps.changed.outputs.all_changed_files }} --config-file .config/mypy.ini
+          mypy ${{ steps.changed.outputs.all_changed_files }} --config-file mypy.ini
