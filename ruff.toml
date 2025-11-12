@@ -1,5 +1,51 @@
 line-length = 79
 target-version = "py311"
 
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    ".env",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+
 [lint]
+select = [
+    "E",    # pycodestyle errors (PEP 8 style violations)
+    "W",    # pycodestyle warnings (style warnings)
+    "F",    # pyflakes (logical errors like unused imports)
+    "I",    # isort (import sorting and organization)
+    "N",    # pep8-naming (naming convention checks)
+    "UP",   # pyupgrade (modernize Python syntax)
+    "B",    # flake8-bugbear (catch common bugs)
+    "C4",   # flake8-comprehensions (better list/dict comprehensions)
+    "D",    # pydocstyle (docstring conventions)
+    "SIM",  # flake8-simplify (simplify code suggestions)
+    "RUF",  # ruff-specific rules (Ruff's own checks)
+    "T20",  # flake8-print (detect print statements)
+    "PTH",  # flake8-use-pathlib (prefer pathlib over os.path)
+    "ARG",  # flake8-unused-arguments (unused function arguments)
+    "ANN",  # flake8-annotations (type annotation checks)
+    ]
+
 extend-select = ["E501"]
+
+ignore = [
+    "D100",  # Missing docstring in public module
+    "D104",  # Missing docstring in public package
+    "D107",  # pydocstyle - missing docstring in __init__
+    "D205"
+]
+
+[lint.pydocstyle]
+convention = "google"  # Enforces Google-style docstrings

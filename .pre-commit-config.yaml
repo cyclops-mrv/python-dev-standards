@@ -19,3 +19,8 @@ repos:
         additional_dependencies:
           - types-shapely
           - types-geopandas
+          - types-requests
+          - pydantic
+          - types-toml
+
+
