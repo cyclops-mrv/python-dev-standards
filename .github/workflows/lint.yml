@@ -18,7 +18,15 @@ jobs:
         with:
           python-version: ${{ inputs.python-version }}
       - name: Install tools
-        run: pip install ruff mypy types-shapely types-geopandas
+        run: |
+          pip install \
+            ruff \
+            mypy \
+            types-shapely \
+            types-geopandas \
+            types-requests \
+            pydantic \
+            types-toml
       - name: Get changed Python files
         id: changed
         uses: tj-actions/changed-files@v45
