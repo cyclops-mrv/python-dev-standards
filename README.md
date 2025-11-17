@@ -1,7 +1,162 @@
 # python-dev-standards
-Repository for shared linting and formatting settings using 'ruff' and 'mypy'.
+Repository containing howto guides for python development and shared linting and formatting settings using `ruff` and `mypy`.
 
-## Pre-commit Hooks
+# Table of Contents
+
+- [Using UV for Python Project & Environment Management](#using-uv-for-python-project--environment-management)
+  - [📦 Install UV](#-install-uv)
+  - [🚀 Initialize a New Project](#-initialize-a-new-project)
+    - [Create a basic project](#create-a-basic-project)
+    - [Project folder structure](#project-folder-structure)
+  - [📓 Add Notebooks (Recommended Structure)](#-add-notebooks-recommended-structure)
+  - [🐍 Create the Virtual Environment](#-create-the-virtual-environment)
+  - [📚 Install Dependencies](#-install-dependencies)
+    - [Install a runtime dependency](#install-a-runtime-dependency)
+    - [Install a development-only dependency](#install-a-development-only-dependency)
+    - [Import dependencies from requirements.txt](#import-dependencies-from-requirementstxt)
+- [Python formatting and linting](#python-formatting-and-linting)
+  - [🪝 Pre-commit Hooks](#-pre-commit-hooks)
+    - [Setup Instructions](#setup-instructions)
+    - [Automatic Checks on Commit](#automatic-checks-on-commit)
+    - [Manual Running of Hooks](#manual-running-of-hooks)
+    - [VS Code Integration (Auto-formatting on Save)](#vs-code-integration-auto-formatting-on-save)
+  - [🧹 Setting up Ruff for local development](#-setting-up-ruff-for-local-development)
+    - [Setup](#setup)
+    - [Manual Usage](#manual-usage)
+      - [Format Code](#format-code)
+      - [Check for Linting Issues](#check-for-linting-issues)
+  - [🔍 Setting up Mypy for local development](#-setting-up-mypy-for-local-development)
+    - [Setup and Dependency Management](#setup-and-dependency-management)
+      - [Adding a New Dependency](#adding-a-new-dependency)
+    - [Manual Usage](#manual-usage-1)
+    - [VS Code Integration](#vs-code-integration)
+
+# Using UV for Python Project & Environment Management
+
+This guide explains how to install UV, set up a project, manage
+environments, and install dependencies using modern Python packaging
+practices.
+
+
+
+## 📦 Install UV
+
+UV is a fast Python package and environment manager from Astral. Install
+it using one of the options below.
+
+### Using Homebrew (macOS)
+
+``` bash
+brew install uv
+```
+
+### Using Curl (Linux/macOS)
+
+``` bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+
+## 🚀 Initialize a New Project
+
+UV can generate a clean project structure following modern Python
+packaging standards.
+
+Create a new Python project (in this example we call the project cyclops-dev but this is arbitrary) managed by `uv`:
+
+### Create a basic project
+
+``` bash
+uv init cyclops-devs --package
+```
+To specify a particular Python version:
+
+``` bash
+uv init cyclops-devs --package --python=3.12
+```
+
+### Project folder structure
+After initialization, your folder will look like this:
+
+    cyclops-dev
+    ├── pyproject.toml
+    ├── README.md
+    └── src
+        └── cyclops_dev
+            └── __init__.py
+    
+- `pyproject.toml` — stores dependencies and project metadata.
+- `src/` — contains your Python source code.
+
+## 📓 Add Notebooks (Recommended Structure)
+
+Keep notebooks separate from your package code to avoid mixing
+experimental work with production modules.
+
+    cyclops-dev
+    ├── notebooks
+    │   └── exploration.ipynb
+    ├── pyproject.toml
+    ├── README.md
+    └── src
+        └── cyclops_dev
+            └── __init__.py
+
+## 🐍 Create the Virtual Environment
+
+UV automatically creates an isolated environment and installs
+dependencies in one step. From your project root:
+
+``` bash
+uv sync
+```
+
+This generates:
+
+    cyclops-dev
+    ├── .venv
+    ├── pyproject.toml
+    ├── README.md
+    └── src
+
+This will:
+
+- Create a `.venv/` folder
+
+- Install dependencies from `pyproject.toml`
+
+## 📚 Install Dependencies
+
+Activate the environment:
+
+``` bash
+source .venv/bin/activate
+```
+
+### Install a runtime dependency
+Add all the required dependency needed to deploy and run your code. This excludes development dependencies like jupyterlab and potentially matplotlib. These development dependencies might be used for research and development but are not required when deploying the code.
+
+``` bash
+uv add numpy
+```
+
+### Install a development-only dependency
+Create a separate dependency list for additional dependencies that are only needed for your development environment. 
+``` bash
+uv add jupyterlab --dev
+```
+
+### Import dependencies from requirements.txt
+In case you want migrate your dependencies from a `requirements.txt` file (used by `pip`) to a `pyproject.toml` (used by `uv`), you can use the following command:
+
+``` bash
+uv add -r requirements.txt
+```
+`uv` automatically updates your `pyproject.toml` with these dependencies.
+
+# Python formatting and linting
+
+## 🪝 Pre-commit Hooks
 
 Our repositories use [pre-commit](https://pre-commit.com/) to automatically check code formatting and type annotations before committing changes. The hooks configured in the `.pre-commit-config.yaml` file ensure that:
 
@@ -77,34 +232,22 @@ If you want to run the hooks manually at any time, you can do so with the follow
     }
     ```
 
-## Setting up Ruff for local development
+## 🧹 Setting up Ruff for local development
 Pre-commit hooks run in an isolated environment to check for formatting and type issues before committing changes, having Ruff and Mypy configured locally allows developers to catch and resolve issues in real-time as they write code. Below the steps to setup Ruff and Mypy for local development.
 
 ### Setup
 
-1.  **Install `uv`:**
-    `uv` is an extremely fast Python package installer and resolver, written in Rust.
-
-    -   **Windows (PowerShell):**
-        ```powershell
-        irm https://astral.sh/uv/install.ps1 | iex
-        ```
-    -   **macOS / Linux:**
-        ```bash
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        ```
-
-2.  **Install Ruff:**
+1.  **Install Ruff:**
     Here we assume that you are in a repository that already contains the `pyproject.toml` file with `ruff` and `mypy` listed as dependencies. First thing to do is sync your environment so the dependencies are installed in your local virutal environment:
 
     ```bash
     uv sync
     ```
 
-    In case ruff and mypy are not listed as dependencies you can add them:
+    In case ruff and mypy are not listed as dependencies you can add them the `linting` group:
 
       ```bash
-    uv add ruff mypy
+    uv add --group linting ruff mypy
     ```
 
 ### Manual Usage
@@ -142,7 +285,7 @@ You can run Ruff from your terminal to format code or check for issues.
     ```
 
 
-## Setting up Mypy for local development
+## 🔍 Setting up Mypy for local development
 
 This project uses [Mypy](http://mypy-lang.org/) for static type checking, which helps ensure type safety and prevent common bugs. The configuration is defined in the `mypy.ini` file.
 
