@@ -15,21 +15,21 @@ Repository containing howto guides for python development and shared linting and
     - [Install a development-only dependency](#install-a-development-only-dependency)
     - [Import dependencies from requirements.txt](#import-dependencies-from-requirementstxt)
 - [Python formatting and linting](#python-formatting-and-linting)
-  - [🪝 Pre-commit Hooks](#-pre-commit-hooks)
-    - [Setup Instructions](#setup-instructions)
-    - [Automatic Checks on Commit](#automatic-checks-on-commit)
-    - [Manual Running of Hooks](#manual-running-of-hooks)
-    - [VS Code Integration (Auto-formatting on Save)](#vs-code-integration-auto-formatting-on-save)
   - [🧹 Setting up Ruff for local development](#-setting-up-ruff-for-local-development)
     - [Setup](#setup)
     - [Manual Usage](#manual-usage)
       - [Format Code](#format-code)
       - [Check for Linting Issues](#check-for-linting-issues)
+    - [VS Code Integration (Auto-formatting on Save)](#vs-code-integration-auto-formatting-on-save)
   - [🔍 Setting up Mypy for local development](#-setting-up-mypy-for-local-development)
     - [Setup and Dependency Management](#setup-and-dependency-management)
       - [Adding a New Dependency](#adding-a-new-dependency)
     - [Manual Usage](#manual-usage-1)
     - [VS Code Integration](#vs-code-integration)
+  - [🪝 Pre-commit Hooks](#-pre-commit-hooks)
+    - [Setup Instructions](#setup-instructions)
+    - [Automatic Checks on Commit](#automatic-checks-on-commit)
+    - [Manual Running of Hooks](#manual-running-of-hooks)
 
 # Using UV for Python Project & Environment Management
 
@@ -156,6 +156,126 @@ uv add -r requirements.txt
 
 # Python formatting and linting
 
+## 🧹 Setting up Ruff for local development
+Configuring Ruff locally allows developers to catch and resolve issues in real-time as they write code. Ruff is used for code formatting. Below the steps to setup Ruff for local development.
+
+### Setup
+
+1.  **Install Ruff:**
+    Here we assume that you are in a repository that already contains the `pyproject.toml` file with `ruff` and `mypy` listed as dependencies. First thing to do is sync your environment so the dependencies are installed in your local virutal environment:
+
+    ```bash
+    uv sync
+    ```
+
+    In case ruff and mypy are not listed as dependencies you can add them the `linting` group:
+
+      ```bash
+    uv add --group linting ruff mypy
+    ```
+
+2.  **Copy the Ruff configuration file**: The Ruff formatting rules are specified in the `ruff.toml` file in this repository (`python-dev-standards`). Copy the [`ruff.toml`](https://github.com/cyclops-mrv/python-dev-standards/blob/main/ruff.toml) file from this repository to root directory of your own repository. 
+
+### Manual Usage
+
+You can run Ruff from your terminal to format code or check for issues.
+
+#### Format Code
+
+-   **Format the entire project:**
+    ```bash
+    ruff format .
+    ```
+-   **Format a specific folder:**
+    ```bash
+    ruff format path/to/your/folder/
+    ```
+-   **Format a single file:**
+    ```bash
+    ruff format path/to/your/file.py
+    ```
+
+#### Check for Linting Issues
+
+-   **Check the entire project and apply automatic fixes:**
+    ```bash
+    ruff check . --fix
+    ```
+-   **Check a specific folder (without fixing):**
+    ```bash
+    ruff check path/to/your/folder/
+    ```
+-   **Check a single file (without fixing):**
+    ```bash
+    ruff check path/to/your/file.py
+    ```
+
+### VS Code Integration (Auto-formatting on Save)
+
+1.  **Install the Ruff Extension:**
+    Install the official [Ruff extension](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) from the VS Code Marketplace.
+
+2.  **Configure VS Code Settings:**
+    Create or open the `.vscode/settings.json` file in your project's root directory and add the following configuration. This ensures everyone on the team uses the same settings for this project.
+
+    ```json
+    {
+      // Enable format on save for all files
+      "editor.formatOnSave": true,
+
+      // Set Ruff as the default formatter for Python files
+      "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+      },
+
+      // Run Ruff's "fixAll" and "organizeImports" actions on save.
+      // This applies linting fixes before formatting.
+      "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+      }
+    }
+    ```
+    
+## 🔍 Setting up Mypy for local development
+
+This project uses [Mypy](http://mypy-lang.org/) for static type checking, which helps ensure type safety and prevent common bugs. The configuration is defined in the [`mypy.ini`](https://github.com/cyclops-mrv/python-dev-standards/blob/main/mypy.ini) file. Copy the `mypyp.ini` file to your repositories root directory.
+
+### Setup and Dependency Management
+
+All linting dependencies and stubs for `mypy` (`types-*` packages), are managed in the `pyproject.toml` file under the `[dependency-groups.linting]` group.
+
+#### Adding a New Dependency
+
+To add a new type stub for a library (e.g., `requests`) to the `linting` group, use the `uv add` command:
+
+```bash
+uv add types-requests --group linting
+```
+This will automatically update your `pyproject.toml` file.
+
+### Manual Usage
+
+To run `mypy`:
+
+-   **Check the entire project:**
+    ```bash
+    mypy .
+    ```
+-   **Check a specific folder:**
+    ```bash
+    mypy path/to/your/folder/
+    ```
+-   **Check a single file:**
+    ```bash
+    mypy path/to/your/file.py
+
+### VS Code Integration
+
+1.  **Install the Mypy Type Checker Extension:**
+    Install the official [Mypy Type Checker extension](https://marketplace.visualstudio.com/items?itemName=ms-python.mypy-type-checker) from the VS Code Marketplace.
+
+
 ## 🪝 Pre-commit Hooks
 
 Our repositories use [pre-commit](https://pre-commit.com/) to automatically check code formatting and type annotations before committing changes. The hooks configured in the `.pre-commit-config.yaml` file ensure that:
@@ -204,121 +324,3 @@ If you want to run the hooks manually at any time, you can do so with the follow
   ```bash
   pre-commit run ruff --all-files
 
-
-### VS Code Integration (Auto-formatting on Save)
-
-1.  **Install the Ruff Extension:**
-    Install the official [Ruff extension](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) from the VS Code Marketplace.
-
-2.  **Configure VS Code Settings:**
-    Create or open the `.vscode/settings.json` file in your project's root directory and add the following configuration. This ensures everyone on the team uses the same settings for this project.
-
-    ```json
-    {
-      // Enable format on save for all files
-      "editor.formatOnSave": true,
-
-      // Set Ruff as the default formatter for Python files
-      "[python]": {
-        "editor.defaultFormatter": "charliermarsh.ruff"
-      },
-
-      // Run Ruff's "fixAll" and "organizeImports" actions on save.
-      // This applies linting fixes before formatting.
-      "editor.codeActionsOnSave": {
-        "source.fixAll": "explicit",
-        "source.organizeImports": "explicit"
-      }
-    }
-    ```
-
-## 🧹 Setting up Ruff for local development
-Pre-commit hooks run in an isolated environment to check for formatting and type issues before committing changes, having Ruff and Mypy configured locally allows developers to catch and resolve issues in real-time as they write code. Below the steps to setup Ruff and Mypy for local development.
-
-### Setup
-
-1.  **Install Ruff:**
-    Here we assume that you are in a repository that already contains the `pyproject.toml` file with `ruff` and `mypy` listed as dependencies. First thing to do is sync your environment so the dependencies are installed in your local virutal environment:
-
-    ```bash
-    uv sync
-    ```
-
-    In case ruff and mypy are not listed as dependencies you can add them the `linting` group:
-
-      ```bash
-    uv add --group linting ruff mypy
-    ```
-
-### Manual Usage
-
-You can run Ruff from your terminal to format code or check for issues.
-
-#### Format Code
-
--   **Format the entire project:**
-    ```bash
-    ruff format .
-    ```
--   **Format a specific folder:**
-    ```bash
-    ruff format path/to/your/folder/
-    ```
--   **Format a single file:**
-    ```bash
-    ruff format path/to/your/file.py
-    ```
-
-#### Check for Linting Issues
-
--   **Check the entire project and apply automatic fixes:**
-    ```bash
-    ruff check . --fix
-    ```
--   **Check a specific folder (without fixing):**
-    ```bash
-    ruff check path/to/your/folder/
-    ```
--   **Check a single file (without fixing):**
-    ```bash
-    ruff check path/to/your/file.py
-    ```
-
-
-## 🔍 Setting up Mypy for local development
-
-This project uses [Mypy](http://mypy-lang.org/) for static type checking, which helps ensure type safety and prevent common bugs. The configuration is defined in the `mypy.ini` file.
-
-### Setup and Dependency Management
-
-All linting dependencies and stubs for `mypy` (`types-*` packages), are managed in the `pyproject.toml` file under the `[dependency-groups.linting]` group.
-
-#### Adding a New Dependency
-
-To add a new type stub for a library (e.g., `requests`) to the `linting` group, use the `uv add` command:
-
-```bash
-uv add types-requests --group linting
-```
-This will automatically update your `pyproject.toml` file.
-
-### Manual Usage
-
-To run `mypy`:
-
--   **Check the entire project:**
-    ```bash
-    mypy .
-    ```
--   **Check a specific folder:**
-    ```bash
-    mypy path/to/your/folder/
-    ```
--   **Check a single file:**
-    ```bash
-    mypy path/to/your/file.py
-
-### VS Code Integration
-
-1.  **Install the Mypy Type Checker Extension:**
-    Install the official [Mypy Type Checker extension](https://marketplace.visualstudio.com/items?itemName=ms-python.mypy-type-checker) from the VS Code Marketplace.
