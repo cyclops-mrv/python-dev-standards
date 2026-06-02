@@ -61,6 +61,8 @@ jobs:
           PREFECT_API_AUTH_STRING: ${{ secrets.PREFECT_API_KEY }}
           PREFECT_API_URL: ${{ vars.PREFECT_API_URL }}
         run: |
+          set -euo pipefail
+
           echo "Cleaning branch '${BRANCH_NAME}' with slug '${BRANCH_SLUG}'"
 
           cat > /tmp/parse_deployments.py << 'PYEOF'
@@ -74,8 +76,14 @@ jobs:
               print(f"{dep['flow_name']}\t{base}")
           PYEOF
 
+          DEPLOYMENTS="$(uv run --only-group deployment python /tmp/parse_deployments.py "${{ inputs.prefect_file }}")"
+          if [ -z "${DEPLOYMENTS}" ]; then
+            echo "No deployments found in ${{ inputs.prefect_file }}"
+            exit 1
+          fi
+
           while IFS=$'\t' read -r FLOW_NAME BASE_NAME; do
             IDENTIFIER="${FLOW_NAME}/${BASE_NAME}-${BRANCH_SLUG}"
             echo "Deleting ${IDENTIFIER}"
             uv run --only-group deployment prefect --no-prompt deployment delete "${IDENTIFIER}" || true
-          done < <(python3 /tmp/parse_deployments.py "${{ inputs.prefect_file }}")
+          done <<< "${DEPLOYMENTS}"
