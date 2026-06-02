@@ -1,0 +1,139 @@
+name: Deploy Prefect flow
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+      dockerfile:
+        required: false
+        type: string
+        default: "deployment/Dockerfile"
+      prefect_file:
+        required: false
+        type: string
+        default: "deployment/prefect.yaml"
+      python_version:
+        required: false
+        type: string
+        default: "3.12"
+      enable_production_deploy:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve deployment context
+        id: resolve
+        run: |
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          BRANCH_SLUG="$(echo "${BRANCH_NAME}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+            | cut -c1-40)"
+
+          if [ -z "${BRANCH_SLUG}" ]; then
+            BRANCH_SLUG="branch"
+          fi
+
+          COMMIT_HASH="$(git rev-parse --short HEAD)"
+
+          if [ "${BRANCH_NAME}" = "main" ] && [ "${{ inputs.enable_production_deploy }}" = "true" ]; then
+            TARGET_ENV="prod"
+            DEPLOYMENT_NAME_SUFFIX=""
+            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}"
+          elif [ "${BRANCH_NAME}" = "main" ] || [ "${BRANCH_NAME}" = "dev" ]; then
+            TARGET_ENV="staging"
+            DEPLOYMENT_NAME_SUFFIX=""
+            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}"
+          else
+            TARGET_ENV="staging"
+            DEPLOYMENT_NAME_SUFFIX="-${BRANCH_SLUG}"
+            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}-${BRANCH_SLUG}"
+          fi
+
+          {
+            echo "branch_name=${BRANCH_NAME}"
+            echo "branch_slug=${BRANCH_SLUG}"
+            echo "commit_hash=${COMMIT_HASH}"
+            echo "target_env=${TARGET_ENV}"
+            echo "deployment_name_suffix=${DEPLOYMENT_NAME_SUFFIX}"
+            echo "prefect_pull_branch=${BRANCH_NAME}"
+            echo "image_tag=${IMAGE_TAG}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "docker_tags<<EOF"
+            echo "${IMAGE_TAG}"
+            if [ "${BRANCH_NAME}" = "main" ] && [ "${{ inputs.enable_production_deploy }}" = "true" ]; then
+              echo "${{ inputs.image_name }}:latest"
+            fi
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Show deployment routing
+        run: |
+          echo "target_env=${{ steps.resolve.outputs.target_env }}"
+          echo "branch=${{ steps.resolve.outputs.branch_name }}"
+          echo "branch_slug=${{ steps.resolve.outputs.branch_slug }}"
+          echo "deployment_name_suffix=${{ steps.resolve.outputs.deployment_name_suffix }}"
+          echo "image_tag=${{ steps.resolve.outputs.image_tag }}"
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKER_UID }}
+          password: ${{ secrets.DOCKER_PWD }}
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Build and push image
+        id: build-docker-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ inputs.dockerfile }}
+          push: true
+          tags: ${{ steps.resolve.outputs.docker_tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          ssh: default
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Prefect Deploy
+        env:
+          PREFECT_API_AUTH_STRING: ${{ steps.resolve.outputs.target_env == 'prod' && secrets.PRODUCTION_PREFECT_API_KEY || secrets.PREFECT_API_KEY }}
+          PREFECT_API_URL: ${{ steps.resolve.outputs.target_env == 'prod' && vars.PRODUCTION_PREFECT_API_URL || vars.PREFECT_API_URL }}
+          IMAGE_TAG: ${{ steps.resolve.outputs.image_tag }}
+          DEPLOYMENT_NAME_SUFFIX: ${{ steps.resolve.outputs.deployment_name_suffix }}
+          PREFECT_PULL_BRANCH: ${{ steps.resolve.outputs.prefect_pull_branch }}
+        run: |
+          uv run --only-group deployment \
+            prefect --no-prompt deploy \
+              --prefect-file ${{ inputs.prefect_file }} \
+              --all

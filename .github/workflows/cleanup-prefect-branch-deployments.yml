@@ -1,0 +1,81 @@
+name: Cleanup Prefect branch deployments
+
+on:
+  workflow_call:
+    inputs:
+      branch_name:
+        required: true
+        type: string
+      prefect_file:
+        required: false
+        type: string
+        default: "deployment/prefect.yaml"
+      python_version:
+        required: false
+        type: string
+        default: "3.12"
+
+jobs:
+  cleanup:
+    name: Cleanup staging branch deployments
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve branch slug
+        run: |
+          BRANCH_NAME="${{ inputs.branch_name }}"
+
+          if [ -z "${BRANCH_NAME}" ]; then
+            echo "No branch provided for cleanup. Exiting."
+            exit 0
+          fi
+
+          BRANCH_SLUG="$(echo "${BRANCH_NAME}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+            | cut -c1-40)"
+
+          if [ -z "${BRANCH_SLUG}" ]; then
+            echo "Unable to resolve branch slug for '${BRANCH_NAME}'. Exiting."
+            exit 0
+          fi
+
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> "${GITHUB_ENV}"
+          echo "BRANCH_SLUG=${BRANCH_SLUG}" >> "${GITHUB_ENV}"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Delete staging branch deployments
+        env:
+          PREFECT_API_AUTH_STRING: ${{ secrets.PREFECT_API_KEY }}
+          PREFECT_API_URL: ${{ vars.PREFECT_API_URL }}
+        run: |
+          echo "Cleaning branch '${BRANCH_NAME}' with slug '${BRANCH_SLUG}'"
+
+          cat > /tmp/parse_deployments.py << 'PYEOF'
+          import re, sys, yaml
+
+          with open(sys.argv[1]) as f:
+              data = yaml.safe_load(f)
+
+          for dep in data.get("deployments", []):
+              base = re.sub(r"\{\{.*?\}\}", "", dep["name"]).strip()
+              print(f"{dep['flow_name']}\t{base}")
+          PYEOF
+
+          while IFS=$'\t' read -r FLOW_NAME BASE_NAME; do
+            IDENTIFIER="${FLOW_NAME}/${BASE_NAME}-${BRANCH_SLUG}"
+            echo "Deleting ${IDENTIFIER}"
+            uv run --only-group deployment prefect --no-prompt deployment delete "${IDENTIFIER}" || true
+          done < <(python3 /tmp/parse_deployments.py "${{ inputs.prefect_file }}")
