@@ -17,6 +17,8 @@ on:
 
 jobs:
   cleanup:
+    # Skip main (prod) and dev (persistent staging); other branches get ephemeral deployments.
+    if: inputs.branch_name != 'main' && inputs.branch_name != 'dev'
     name: Cleanup staging branch deployments
     runs-on: ubuntu-latest
 
