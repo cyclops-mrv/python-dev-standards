@@ -98,10 +98,13 @@ jobs:
           username: ${{ vars.DOCKER_UID }}
           password: ${{ secrets.DOCKER_PWD }}
 
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.10.0
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.2.0
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          app-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Build and push image
         id: build-docker-image
@@ -113,7 +116,8 @@ jobs:
           tags: ${{ steps.resolve.outputs.docker_tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          ssh: default
+          secrets: |
+            github_token=${{ steps.app-token.outputs.token }}
 
       - name: Setup Python
         uses: actions/setup-python@v6.2.0
