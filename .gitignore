@@ -1,3 +1,5 @@
 .cursor/
 
 .DS_Store
+.envrc
+.env
