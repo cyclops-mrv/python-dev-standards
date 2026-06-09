@@ -31,11 +31,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Resolve deployment context
         id: resolve
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          BRANCH_NAME="${GITHUB_REF_NAME}"
+          if [ -n "${PR_HEAD_REF}" ]; then
+            BRANCH_NAME="${PR_HEAD_REF}"
+          else
+            BRANCH_NAME="${GITHUB_REF_NAME}"
+          fi
           BRANCH_SLUG="$(echo "${BRANCH_NAME}" \
             | tr '[:upper:]' '[:lower:]' \
             | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
