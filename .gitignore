@@ -1,0 +1,6 @@
+.cursor/
+/scripts
+
+.DS_Store
+.envrc
+.env

@@ -1,0 +1,91 @@
+name: Cleanup Prefect branch deployments
+
+on:
+  workflow_call:
+    inputs:
+      branch_name:
+        required: true
+        type: string
+      prefect_file:
+        required: false
+        type: string
+        default: "deployment/prefect.yaml"
+      python_version:
+        required: false
+        type: string
+        default: "3.12"
+
+jobs:
+  cleanup:
+    # Skip main (prod) and dev (persistent staging); other branches get ephemeral deployments.
+    if: inputs.branch_name != 'main' && inputs.branch_name != 'dev'
+    name: Cleanup staging branch deployments
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.3
+
+      - name: Resolve branch slug
+        run: |
+          BRANCH_NAME="${{ inputs.branch_name }}"
+
+          if [ -z "${BRANCH_NAME}" ]; then
+            echo "No branch provided for cleanup. Exiting."
+            exit 0
+          fi
+
+          BRANCH_SLUG="$(echo "${BRANCH_NAME}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+            | cut -c1-40)"
+
+          if [ -z "${BRANCH_SLUG}" ]; then
+            echo "Unable to resolve branch slug for '${BRANCH_NAME}'. Exiting."
+            exit 0
+          fi
+
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> "${GITHUB_ENV}"
+          echo "BRANCH_SLUG=${BRANCH_SLUG}" >> "${GITHUB_ENV}"
+
+      - name: Setup Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "latest"
+
+      - name: Delete staging branch deployments
+        env:
+          PREFECT_API_AUTH_STRING: ${{ secrets.PREFECT_API_KEY }}
+          PREFECT_API_URL: ${{ vars.PREFECT_API_URL }}
+        run: |
+          set -euo pipefail
+
+          echo "Cleaning branch '${BRANCH_NAME}' with slug '${BRANCH_SLUG}'"
+
+          cat > /tmp/parse_deployments.py << 'PYEOF'
+          import re, sys, yaml
+
+          with open(sys.argv[1]) as f:
+              data = yaml.safe_load(f)
+
+          for dep in data.get("deployments", []):
+              base = re.sub(r"\{\{.*?\}\}", "", dep["name"]).strip()
+              print(f"{dep['flow_name']}\t{base}")
+          PYEOF
+
+          DEPLOYMENTS="$(uv run --only-group deployment python /tmp/parse_deployments.py "${{ inputs.prefect_file }}")"
+          if [ -z "${DEPLOYMENTS}" ]; then
+            echo "No deployments found in ${{ inputs.prefect_file }}"
+            exit 1
+          fi
+
+          while IFS=$'\t' read -r FLOW_NAME BASE_NAME; do
+            IDENTIFIER="${FLOW_NAME}/${BASE_NAME}-${BRANCH_SLUG}"
+            echo "Deleting ${IDENTIFIER}"
+            uv run --only-group deployment prefect --no-prompt deployment delete "${IDENTIFIER}" || true
+          done <<< "${DEPLOYMENTS}"

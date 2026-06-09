@@ -30,6 +30,11 @@ Repository containing howto guides for python development and shared linting and
     - [Setup Instructions](#setup-instructions)
     - [Automatic Checks on Commit](#automatic-checks-on-commit)
     - [Manual Running of Hooks](#manual-running-of-hooks)
+- [Private GitHub dependencies in Docker builds](#private-github-dependencies-in-docker-builds)
+  - [Org prerequisites](#org-prerequisites)
+  - [pyproject.toml](#pyprojecttoml)
+  - [Dockerfile pattern](#dockerfile-pattern)
+  - [Migration checklist](#migration-checklist)
 
 # Using UV for Python Project & Environment Management
 
@@ -323,4 +328,70 @@ If you want to run the hooks manually at any time, you can do so with the follow
 
   ```bash
   pre-commit run ruff --all-files
+  ```
+
+# Private GitHub dependencies in Docker builds
+
+Projects that call the reusable [`deploy-prefect-flow.yml`](.github/workflows/deploy-prefect-flow.yml) workflow can install private org git dependencies during Docker image builds using a GitHub App token — no SSH deploy keys required.
+
+## Org prerequisites
+
+Configure these at the GitHub organization level:
+
+- **Variable** `GH_APP_ID` — GitHub App ID
+- **Secret** `GH_APP_PRIVATE_KEY` — GitHub App private key (PEM)
+- GitHub App installed org-wide with **Contents: Read** access to private repositories
+
+After all consumer repos are migrated, retire the legacy `DEPLOY_SSH_KEY` secret.
+
+## pyproject.toml
+
+Keep private git dependencies as normal HTTPS or SSH URLs. Do not commit tokens or placeholders — the Dockerfile injects authentication at build time.
+
+```toml
+[project]
+dependencies = ["my-private-lib"]
+
+[tool.uv.sources]
+my-private-lib = { git = "https://github.com/org/my-private-lib.git", tag = "v1.0.0" }
+# or, if migrating from SSH:
+# my-private-lib = { git = "ssh://git@github.com/org/my-private-lib.git", tag = "v1.0.0" }
+```
+
+Local development continues to work via SSH keys or `gh auth setup-git`; CI and Docker use the build-secret pattern below.
+
+## Dockerfile pattern
+
+Replace `RUN --mount=type=ssh` (and any `openssh-client` / `known_hosts` setup) with:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+COPY pyproject.toml .
+
+RUN --mount=type=secret,id=github_token \
+    GITHUB_TOKEN=$(cat /run/secrets/github_token) && \
+    sed -i "s|ssh://git@github.com/|https://x-access-token:${GITHUB_TOKEN}@github.com/|g" pyproject.toml && \
+    sed -i "s|https://github.com/|https://x-access-token:${GITHUB_TOKEN}@github.com/|g" pyproject.toml && \
+    uv pip install --system -r pyproject.toml
+```
+
+Notes:
+
+- The `github_token` build secret is injected by `deploy-prefect-flow.yml`; consumer repos do not define it in their own workflows.
+- `GITHUB_TOKEN` is a shell variable scoped to that single `RUN` step; the secret file is never copied into the image.
+- The two `sed` commands cover both legacy SSH git URLs and plain HTTPS URLs in `pyproject.toml`.
+- Set `ENV UV_SYSTEM_PYTHON=1` (or use `--system` as shown) when installing into the system Python in slim base images.
+- Copy `pyproject.toml` before this step; avoid re-copying an unmodified `pyproject.toml` over the sed-modified file in later layers if subsequent install steps depend on authenticated URLs.
+
+If a project uses `uv sync` instead of `uv pip install`, apply the same `--mount=type=secret,id=github_token` + `sed` pattern in the same `RUN` as the sync command (sed first, then `uv sync`).
+
+## Migration checklist
+
+For each repo calling `deploy-prefect-flow.yml`:
+
+1. Ensure private git deps in `pyproject.toml` use `https://github.com/...` or `ssh://git@github.com/...` (no embedded tokens).
+2. Update `deployment/Dockerfile`: drop SSH mounts; add the sed + `uv pip install --system -r pyproject.toml` pattern (or sed + `uv sync` if that is what the Dockerfile uses).
+3. Re-run the deploy workflow to verify the image build succeeds.
+4. Remove per-repo deploy keys / `DEPLOY_SSH_KEY` once all repos are migrated.
 
