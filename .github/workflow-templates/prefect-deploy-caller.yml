@@ -1,0 +1,40 @@
+name: Deploy Prefect flow
+
+# Triggers that drive the routing in deploy-prefect-flow.yml:
+#
+#   push to main       → prod,    no suffix   (merged PR or direct push)
+#   push to dev        → staging, no suffix   (merged PR or direct push)
+#   PR (head: dev)     → staging, no suffix   (dev → main review deploy)
+#   PR (head: feature) → staging, with suffix (ephemeral branch deploy)
+#
+# Do NOT add pull_request type 'closed' here — cleanup is handled
+# automatically by cleanup-prefect-branch-deployments.yml.
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - dev
+
+# Serialise concurrent deploys for the same branch.
+# Necessary for the dev→main PR scenario: pushing to dev fires both a push
+# event and a pull_request:synchronize event simultaneously, which would
+# otherwise launch two identical staging deploys in parallel.
+concurrency:
+  group: deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    uses: <org>/python-dev-standards/.github/workflows/deploy-prefect-flow.yml@main
+    with:
+      image_name: <dockerhub-org>/<image-name>
+      # dockerfile: deployment/Dockerfile   # default
+      # prefect_file: deployment/prefect.yaml  # default
+      # python_version: "3.12"              # default
+    secrets: inherit

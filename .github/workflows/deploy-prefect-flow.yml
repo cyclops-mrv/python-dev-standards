@@ -18,15 +18,14 @@ on:
         required: false
         type: string
         default: "3.12"
-      enable_production_deploy:
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    # Merged PRs are handled by the push event on the target branch; skip the
+    # pull_request:closed event to prevent a consumer from firing deploy twice on merge.
+    if: github.event.action != 'closed'
 
     steps:
       - name: Checkout
@@ -37,37 +36,35 @@ jobs:
       - name: Resolve deployment context
         id: resolve
         env:
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          # For PR events use the head branch; for push events use the pushed branch.
+          BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
         run: |
-          if [ -n "${PR_HEAD_REF}" ]; then
-            BRANCH_NAME="${PR_HEAD_REF}"
-          else
-            BRANCH_NAME="${GITHUB_REF_NAME}"
-          fi
           BRANCH_SLUG="$(echo "${BRANCH_NAME}" \
             | tr '[:upper:]' '[:lower:]' \
             | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
             | cut -c1-40)"
-
-          if [ -z "${BRANCH_SLUG}" ]; then
-            BRANCH_SLUG="branch"
-          fi
+          [ -z "${BRANCH_SLUG}" ] && BRANCH_SLUG="branch"
 
           COMMIT_HASH="$(git rev-parse --short HEAD)"
 
-          if [ "${BRANCH_NAME}" = "main" ] && [ "${{ inputs.enable_production_deploy }}" = "true" ]; then
-            TARGET_ENV="prod"
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            # Push to main (merged PR or direct) → prod; push to dev → staging.
+            [ "${BRANCH_NAME}" = "main" ] && TARGET_ENV="prod" || TARGET_ENV="staging"
             DEPLOYMENT_NAME_SUFFIX=""
-            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}"
-          elif [ "${BRANCH_NAME}" = "main" ] || [ "${BRANCH_NAME}" = "dev" ]; then
+          elif [ "${BRANCH_NAME}" = "dev" ]; then
+            # PR from dev (dev → main): deploy to staging without an ephemeral suffix.
             TARGET_ENV="staging"
             DEPLOYMENT_NAME_SUFFIX=""
-            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}"
           else
+            # PR from a feature branch: ephemeral staging deployment with branch suffix.
             TARGET_ENV="staging"
             DEPLOYMENT_NAME_SUFFIX="-${BRANCH_SLUG}"
-            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}-${BRANCH_SLUG}"
           fi
+
+          [ -n "${DEPLOYMENT_NAME_SUFFIX}" ] \
+            && IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}-${BRANCH_SLUG}" \
+            || IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}"
 
           {
             echo "branch_name=${BRANCH_NAME}"
@@ -82,17 +79,15 @@ jobs:
           {
             echo "docker_tags<<EOF"
             echo "${IMAGE_TAG}"
-            if [ "${BRANCH_NAME}" = "main" ] && [ "${{ inputs.enable_production_deploy }}" = "true" ]; then
-              echo "${{ inputs.image_name }}:latest"
-            fi
+            [ "${TARGET_ENV}" = "prod" ] && echo "${{ inputs.image_name }}:latest"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Show deployment routing
         run: |
-          echo "target_env=${{ steps.resolve.outputs.target_env }}"
           echo "branch=${{ steps.resolve.outputs.branch_name }}"
           echo "branch_slug=${{ steps.resolve.outputs.branch_slug }}"
+          echo "target_env=${{ steps.resolve.outputs.target_env }}"
           echo "deployment_name_suffix=${{ steps.resolve.outputs.deployment_name_suffix }}"
           echo "image_tag=${{ steps.resolve.outputs.image_tag }}"
 
