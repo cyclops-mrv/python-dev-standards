@@ -46,11 +46,11 @@ assert_cleanup() {
 # Models whether the deploy job in deploy-prefect-flow.yml runs (not skipped).
 # PR-only model: push skipped; closed runs only when merged; feature PRs need flag.
 # Args: test_name event_name action head_ref want_runs("true"|"false")
-#       [deploy_feature_branches("true"|"false"), default false]
+#       [deploy_feature_branches("true"|"false"), default true]
 #       [merged("true"|"false"), default false — for pull_request closed events]
 assert_deploy_runs() {
   local name="$1" event_name="$2" action="$3" head_ref="$4" want_runs="$5"
-  local deploy_feature_branches="${6:-false}"
+  local deploy_feature_branches="${6:-true}"
   local merged="${7:-false}"
 
   local RUNS="true"
@@ -143,15 +143,15 @@ assert_deploy_runs "merged dev→main deploys"                          pull_req
 assert_deploy_runs "merged feature→main deploys"                    pull_request closed        feature/my-feature   true   false true
 assert_deploy_runs "dev→main PR opened deploys"                       pull_request opened        dev                  true
 assert_deploy_runs "dev→main PR synchronize deploys"                  pull_request synchronize   dev                  true
-assert_deploy_runs "feature PR skipped (deploy_feature_branches off)" pull_request synchronize   feature/my-feature   false
+assert_deploy_runs "feature PR runs by default"                       pull_request synchronize   feature/my-feature   true
 assert_deploy_runs "workflow_dispatch runs"                           workflow_dispatch dispatch feature/my-feature   true
 
 echo ""
-echo "deploy_feature_branches enabled (ephemeral feature PR deploys):"
+echo "deploy_feature_branches disabled (opt-out):"
 
-assert_deploy_runs "feature PR runs when enabled"                     pull_request synchronize   feature/my-feature   true  true
-assert_deploy_runs "dev→main still runs when enabled"                 pull_request opened        dev                  true  true
-assert_deploy_runs "merged feature→dev still deploys when enabled"    pull_request closed        feature/my-feature   true  true  true
+assert_deploy_runs "feature PR skipped when disabled"                 pull_request synchronize   feature/my-feature   false false
+assert_deploy_runs "dev→main still runs when disabled"                pull_request opened        dev                  true  false
+assert_deploy_runs "merged feature→dev still deploys when disabled"   pull_request closed        feature/my-feature   true  false true
 
 echo ""
 echo ""

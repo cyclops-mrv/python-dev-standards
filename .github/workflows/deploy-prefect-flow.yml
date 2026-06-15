@@ -21,10 +21,10 @@ on:
       deploy_feature_branches:
         required: false
         type: boolean
-        default: false
+        default: true
         description: >-
-          When true, deploy ephemeral Prefect environments for feature-branch PRs.
-          When false (default), only merged PRs to main/dev and open dev→main PRs deploy.
+          When true (default), deploy ephemeral Prefect environments for feature-branch PRs.
+          Set false to skip feature-branch PR deploys (merged PRs and dev→main PRs still deploy).
 
 jobs:
   deploy:
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     # PR-only deploy model: no push triggers. Persistent main/dev deploys run on
     # pull_request closed + merged; review deploys on opened/synchronize/reopened.
-    # Skip feature-branch PRs unless deploy_feature_branches is enabled.
+    # Skip feature-branch PRs when deploy_feature_branches is false.
     if: >-
       github.event_name != 'push' &&
       (github.event_name != 'pull_request' ||
