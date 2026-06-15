@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Tests deploy routing via .github/actions/resolve-deploy-context/resolve.sh
-# against all scenarios defined in ci-cd-routing.csv.
+# and deploy job gates in deploy-prefect-flow.yml (PR-only model).
 # Run locally with: bash tests/test-deploy-routing.sh
 
 PASS=0
@@ -44,19 +44,21 @@ assert_cleanup() {
 }
 
 # Models whether the deploy job in deploy-prefect-flow.yml runs (not skipped).
-# Skips pull_request:synchronize when head is dev — push to dev handles deploy.
-# Skips feature-branch PRs when deploy_feature_branches is false (the default).
+# PR-only model: push skipped; closed runs only when merged; feature PRs need flag.
 # Args: test_name event_name action head_ref want_runs("true"|"false")
 #       [deploy_feature_branches("true"|"false"), default false]
+#       [merged("true"|"false"), default false — for pull_request closed events]
 assert_deploy_runs() {
   local name="$1" event_name="$2" action="$3" head_ref="$4" want_runs="$5"
   local deploy_feature_branches="${6:-false}"
+  local merged="${7:-false}"
 
   local RUNS="true"
-  if [ "${action}" = "closed" ]; then
+
+  if [ "${event_name}" = "push" ]; then
     RUNS="false"
-  elif [ "${event_name}" = "pull_request" ] && [ "${head_ref}" = "dev" ] && [ "${action}" = "synchronize" ]; then
-    RUNS="false"
+  elif [ "${event_name}" = "pull_request" ] && [ "${action}" = "closed" ]; then
+    [ "${merged}" = "true" ] && RUNS="true" || RUNS="false"
   elif [ "${deploy_feature_branches}" != "true" ] \
       && [ "${event_name}" = "pull_request" ] \
       && [ "${head_ref}" != "dev" ]; then
@@ -73,14 +75,13 @@ assert_deploy_runs() {
 }
 
 # Runs the routing logic and asserts expected outputs.
-# Args: test_name event_name branch_name
-#       expected_target_env expected_suffix expected_image_tag_suffix
+# Args: test_name event_name branch_name expected_target_env expected_suffix
 assert_routing() {
   local name="$1"
-  local event_name="$2"   # "push" or "pull_request"
-  local branch_name="$3"  # pushed branch (push) or PR head branch (pull_request)
+  local event_name="$2"
+  local branch_name="$3"
   local want_env="$4"
-  local want_suffix="$5"  # expected DEPLOYMENT_NAME_SUFFIX value
+  local want_suffix="$5"
 
   resolve_deploy_context "${event_name}" "${branch_name}" "${TEST_IMAGE_NAME}" "${TEST_COMMIT_HASH}"
 
@@ -99,34 +100,30 @@ assert_routing() {
 
 echo "=== deploy-prefect-flow routing tests ==="
 echo ""
-echo "CSV scenarios:"
+echo "CSV scenarios (resolve routing):"
 
 # Row 1  — PR: feature → dev
 assert_routing "PR: feature→dev"      pull_request "feature/my-feature"  staging "-feature-my-feature"
 
-# Row 2  — Merged PR: feature → dev  (appears as push to dev)
+# Row 2  — Merged PR: feature → dev (resolve uses push + base dev)
 assert_routing "Merged: feature→dev"  push         "dev"                  staging ""
 
 # Row 5  — PR: dev → main
 assert_routing "PR: dev→main"         pull_request "dev"                  staging ""
 
-# Row 7  — Merged PR: dev → main  (appears as push to main)
+# Row 7  — Merged PR: dev → main (resolve uses push + base main)
 assert_routing "Merged: dev→main"     push         "main"                 prod    ""
 
 # Row 9  — PR: feature → main
 assert_routing "PR: feature→main"     pull_request "feature/my-feature"  staging "-feature-my-feature"
 
-# Row 12 — Merged PR: feature → main  (appears as push to main)
+# Row 12 — Merged PR: feature → main (resolve uses push + base main)
 assert_routing "Merged: feature→main" push         "main"                 prod    ""
 
 echo ""
 echo "Edge cases:"
 
-# Branch slug normalisation
 assert_routing "PR: Feature/ABC-123→dev (slug normalisation)" pull_request "Feature/ABC-123" staging "-feature-abc-123"
-
-# Direct push to dev (not via PR)
-assert_routing "Direct push to dev"   push         "dev"                  staging ""
 
 echo ""
 echo "Manual dispatch (workflow_dispatch):"
@@ -136,27 +133,25 @@ assert_routing "dispatch on dev"            workflow_dispatch "dev"             
 assert_routing "dispatch on main"           workflow_dispatch "main"                 prod    ""
 
 echo ""
-echo "Double-fire guard (dev→main PR updated: push+synchronize must route identically so cancel-in-progress is safe):"
+echo "Deploy job gates (PR-only model):"
 
-# When dev is pushed while a dev→main PR is open, GitHub fires BOTH a push to dev
-# AND a pull_request:synchronize. Both must produce identical routing so that
-# whichever the concurrency group cancels, the surviving run is correct.
-assert_routing "push to dev (side of double-fire)"             push         "dev" staging ""
-assert_routing "pull_request:synchronize dev→main (other side)" pull_request "dev" staging ""
-
-echo ""
-echo "Deploy job skip (dev→main double-fire — synchronize skipped, push deploys):"
-
-assert_deploy_runs "push to dev runs deploy"                          push         push          dev                  true
-assert_deploy_runs "pull_request:synchronize dev→main skipped"        pull_request synchronize   dev                  false
-assert_deploy_runs "pull_request:opened dev→main runs deploy"         pull_request opened        dev                  true
+assert_deploy_runs "push to dev skipped"                              push         push          dev                  false
+assert_deploy_runs "push to main skipped"                             push         push          main                 false
+assert_deploy_runs "PR closed unmerged skipped"                       pull_request closed        feature/my-feature   false
+assert_deploy_runs "merged feature→dev deploys"                       pull_request closed        feature/my-feature   true   false true
+assert_deploy_runs "merged dev→main deploys"                          pull_request closed        dev                  true   false true
+assert_deploy_runs "merged feature→main deploys"                    pull_request closed        feature/my-feature   true   false true
+assert_deploy_runs "dev→main PR opened deploys"                       pull_request opened        dev                  true
+assert_deploy_runs "dev→main PR synchronize deploys"                  pull_request synchronize   dev                  true
 assert_deploy_runs "feature PR skipped (deploy_feature_branches off)" pull_request synchronize   feature/my-feature   false
+assert_deploy_runs "workflow_dispatch runs"                           workflow_dispatch dispatch feature/my-feature   true
 
 echo ""
 echo "deploy_feature_branches enabled (ephemeral feature PR deploys):"
 
 assert_deploy_runs "feature PR runs when enabled"                     pull_request synchronize   feature/my-feature   true  true
 assert_deploy_runs "dev→main still runs when enabled"                 pull_request opened        dev                  true  true
+assert_deploy_runs "merged feature→dev still deploys when enabled"    pull_request closed        feature/my-feature   true  true  true
 
 echo ""
 echo ""
@@ -164,19 +159,13 @@ echo "=== cleanup-prefect-branch-deployments teardown tests ==="
 echo ""
 echo "CSV scenarios (PR closed, whether merged or not):"
 
-# Row 1 / Row 2 — feature→dev: ephemeral deployment must be removed on PR close
 assert_cleanup "PR feature→dev closed"  "feature/my-feature" "dev"  "true"
-
-# Row 5 / Row 7 — dev→main: dev branch deployment is persistent, must NOT be removed
 assert_cleanup "PR dev→main closed"     "dev"                "main" "false"
-
-# Row 9 / Row 12 — feature→main: ephemeral deployment must be removed on PR close
 assert_cleanup "PR feature→main closed" "feature/my-feature" "main" "true"
 
 echo ""
 echo "Out-of-scope PRs (trigger branches filter must block these):"
 
-# PR targeting a non-tracked branch: trigger must not fire (no ephemeral deployment exists)
 assert_cleanup "PR feature→feature closed" "feature/x" "feature/y" "false"
 assert_cleanup "PR feature→hotfix closed"  "feature/x" "hotfix/z"  "false"
 

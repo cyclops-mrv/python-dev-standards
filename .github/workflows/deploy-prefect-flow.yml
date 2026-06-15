@@ -24,41 +24,43 @@ on:
         default: false
         description: >-
           When true, deploy ephemeral Prefect environments for feature-branch PRs.
-          When false (default), only push to main/dev and PRs with head dev deploy.
+          When false (default), only merged PRs to main/dev and open dev→main PRs deploy.
 
 jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    # Merged PRs are handled by the push event on the target branch; skip the
-    # pull_request:closed event to prevent a consumer from firing deploy twice on merge.
-    # Skip pull_request:synchronize when head is dev — pushing to dev fires both a push
-    # event and a synchronize on the dev→main PR; the push run handles deploy.
+    # PR-only deploy model: no push triggers. Persistent main/dev deploys run on
+    # pull_request closed + merged; review deploys on opened/synchronize/reopened.
     # Skip feature-branch PRs unless deploy_feature_branches is enabled.
     if: >-
-      github.event.action != 'closed' &&
-      !(github.event_name == 'pull_request' &&
-        github.event.pull_request.head.ref == 'dev' &&
-        github.event.action == 'synchronize') &&
+      github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+       github.event.action != 'closed' ||
+       github.event.pull_request.merged == true) &&
       (inputs.deploy_feature_branches ||
        github.event_name != 'pull_request' ||
+       github.event.action == 'closed' ||
        github.event.pull_request.head.ref == 'dev')
     concurrency:
-      group: deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+      group: deploy-${{
+        github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref ||
+        github.event_name == 'pull_request' && github.event.pull_request.head.ref ||
+        github.ref_name }}
       cancel-in-progress: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.3
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
 
       - name: Resolve deployment context
         id: resolve
         uses: ./.github/actions/resolve-deploy-context
         with:
-          event_name: ${{ github.event_name }}
-          branch_name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+          event_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && 'push' || github.event_name }}
+          branch_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref || github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           image_name: ${{ inputs.image_name }}
 
       - name: Show deployment routing
@@ -70,7 +72,6 @@ jobs:
           echo "image_tag=${{ steps.resolve.outputs.image_tag }}"
 
       - name: Set up Docker Buildx
-        id: buildx
         uses: docker/setup-buildx-action@v4.1.0
 
       - name: Log in to Docker Hub
@@ -88,7 +89,6 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       - name: Build and push image
-        id: build-docker-image
         uses: docker/build-push-action@v7.2.0
         with:
           context: .

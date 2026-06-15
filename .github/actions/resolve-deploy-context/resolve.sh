@@ -25,7 +25,7 @@ resolve_deploy_context() {
     | cut -c1-40)"
   [ -n "${BRANCH_SLUG}" ] || BRANCH_SLUG="branch"
 
-  # Rule 1 — prod only on push to main; everything else staging.
+  # Rule 1 — prod on push to main (includes merged-PR routing, which passes event push).
   if [ "${event_name}" != "pull_request" ] && [ "${branch_name}" = "main" ]; then
     TARGET_ENV="prod"
   else
