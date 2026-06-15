@@ -66,8 +66,16 @@ jobs:
         with:
           version: "latest"
 
+      # Must match the @ref on cleanup-prefect-branch-deployments.yml in consumer callers.
+      - name: Resolve deployment identifiers
+        id: identifiers
+        uses: cyclops-mrv/python-dev-standards/.github/actions/parse-prefect-deployment-identifiers@main
+        with:
+          prefect_file: ${{ inputs.prefect_file }}
+
       - name: Delete staging branch deployments
         env:
+          DEPLOYMENTS: ${{ steps.identifiers.outputs.deployments }}
           PREFECT_API_AUTH_STRING: ${{ secrets.PREFECT_API_KEY }}
           PREFECT_API_URL: ${{ vars.PREFECT_API_URL }}
         run: |
@@ -75,18 +83,6 @@ jobs:
 
           echo "Cleaning branch '${BRANCH_NAME}' with slug '${BRANCH_SLUG}'"
 
-          cat > /tmp/parse_deployments.py << 'PYEOF'
-          import re, sys, yaml
-
-          with open(sys.argv[1]) as f:
-              data = yaml.safe_load(f)
-
-          for dep in data.get("deployments", []):
-              base = re.sub(r"\{\{.*?\}\}", "", dep["name"]).strip()
-              print(f"{dep['flow_name']}\t{base}")
-          PYEOF
-
-          DEPLOYMENTS="$(uv run --only-group deployment python /tmp/parse_deployments.py "${{ inputs.prefect_file }}")"
           if [ -z "${DEPLOYMENTS}" ]; then
             echo "No deployments found in ${{ inputs.prefect_file }}"
             exit 1

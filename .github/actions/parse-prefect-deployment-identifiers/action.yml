@@ -1,0 +1,27 @@
+name: Parse Prefect deployment identifiers
+description: Resolve {flow.name}/{deployment.name} pairs from prefect.yaml entrypoints
+
+inputs:
+  prefect_file:
+    description: Path to prefect.yaml relative to repository root
+    required: true
+    default: deployment/prefect.yaml
+
+outputs:
+  deployments:
+    description: Tab-separated flow_name and base deployment name, one pair per line
+    value: ${{ steps.run.outputs.deployments }}
+
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      run: |
+        set -euo pipefail
+        DEPLOYMENTS="$(uv run --only-group deployment python "${GITHUB_ACTION_PATH}/parse.py" "${{ inputs.prefect_file }}")"
+        {
+          echo "deployments<<EOF"
+          echo "${DEPLOYMENTS}"
+          echo "EOF"
+        } >> "${GITHUB_OUTPUT}"
