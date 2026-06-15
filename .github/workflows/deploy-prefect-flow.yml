@@ -25,7 +25,16 @@ jobs:
     runs-on: ubuntu-latest
     # Merged PRs are handled by the push event on the target branch; skip the
     # pull_request:closed event to prevent a consumer from firing deploy twice on merge.
-    if: github.event.action != 'closed'
+    # Skip pull_request:synchronize when head is dev — pushing to dev fires both a push
+    # event and a synchronize on the dev→main PR; the push run handles deploy.
+    if: >-
+      github.event.action != 'closed' &&
+      !(github.event_name == 'pull_request' &&
+        github.event.pull_request.head.ref == 'dev' &&
+        github.event.action == 'synchronize')
+    concurrency:
+      group: deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout

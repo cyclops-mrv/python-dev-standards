@@ -9,6 +9,9 @@ name: Deploy Prefect flow
 #
 # Do NOT add pull_request type 'closed' here — cleanup is handled
 # automatically by cleanup-prefect-branch-deployments.yml.
+#
+# Do NOT add concurrency here — deploy-prefect-flow.yml serialises deploys at
+# the job level and skips duplicate pull_request:synchronize runs for dev→main.
 
 on:
   push:
@@ -20,14 +23,6 @@ on:
     branches:
       - main
       - dev
-
-# Serialise concurrent deploys for the same branch.
-# Necessary for the dev→main PR scenario: pushing to dev fires both a push
-# event and a pull_request:synchronize event simultaneously, which would
-# otherwise launch two identical staging deploys in parallel.
-concurrency:
-  group: deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: true
 
 jobs:
   deploy:

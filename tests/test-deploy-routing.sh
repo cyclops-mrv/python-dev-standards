@@ -36,6 +36,28 @@ assert_cleanup() {
   fi
 }
 
+# Models whether the deploy job in deploy-prefect-flow.yml runs (not skipped).
+# Skips pull_request:synchronize when head is dev — push to dev handles deploy.
+# Args: test_name event_name action head_ref want_runs("true"|"false")
+assert_deploy_runs() {
+  local name="$1" event_name="$2" action="$3" head_ref="$4" want_runs="$5"
+
+  local RUNS="true"
+  if [ "${action}" = "closed" ]; then
+    RUNS="false"
+  elif [ "${event_name}" = "pull_request" ] && [ "${head_ref}" = "dev" ] && [ "${action}" = "synchronize" ]; then
+    RUNS="false"
+  fi
+
+  if [ "${RUNS}" = "${want_runs}" ]; then
+    echo "  PASS  ${name}"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL  ${name} — deploy runs: got '${RUNS}', want '${want_runs}'"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 # Runs the routing logic and asserts expected outputs.
 # Args: test_name event_name branch_name
 #       expected_target_env expected_suffix expected_image_tag_suffix
@@ -119,6 +141,14 @@ echo "Double-fire guard (dev→main PR updated: push+synchronize must route iden
 # whichever the concurrency group cancels, the surviving run is correct.
 assert_routing "push to dev (side of double-fire)"             push         "dev" staging ""
 assert_routing "pull_request:synchronize dev→main (other side)" pull_request "dev" staging ""
+
+echo ""
+echo "Deploy job skip (dev→main double-fire — synchronize skipped, push deploys):"
+
+assert_deploy_runs "push to dev runs deploy"                          push         push          dev                  true
+assert_deploy_runs "pull_request:synchronize dev→main skipped"        pull_request synchronize   dev                  false
+assert_deploy_runs "pull_request:opened dev→main runs deploy"         pull_request opened        dev                  true
+assert_deploy_runs "pull_request feature branch runs deploy"          pull_request synchronize   feature/my-feature   true
 
 echo ""
 echo ""
