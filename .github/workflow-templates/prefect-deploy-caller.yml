@@ -11,6 +11,9 @@ name: Deploy Prefect flow
 # Cleanup on PR close is handled by cleanup-prefect-branch-deployments.yml.
 #
 # Do NOT add concurrency here — deploy-prefect-flow.yml serialises deploys at the job level.
+#
+# Pin the @ref below to match resolve-deploy-context in deploy-prefect-flow.yml
+# (currently cyc-1605-refactor-deployment-workflows; switch both to @main when merged).
 
 on:
   pull_request:
@@ -21,7 +24,7 @@ on:
 
 jobs:
   deploy:
-    uses: <org>/python-dev-standards/.github/workflows/deploy-prefect-flow.yml@main
+    uses: <org>/python-dev-standards/.github/workflows/deploy-prefect-flow.yml@cyc-1605-refactor-deployment-workflows
     with:
       image_name: <dockerhub-org>/<image-name>
       # deploy_feature_branches: true       # default false — opt in for ephemeral PR deploys
