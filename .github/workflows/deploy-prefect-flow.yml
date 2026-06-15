@@ -55,9 +55,24 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
 
+      # Local composite actions in reusable workflows resolve against the caller repo.
+      # Check out resolve-deploy-context from python-dev-standards at the same @ref
+      # as this workflow (from GITHUB_WORKFLOW_REF on workflow_call).
+      - id: standards-ref
+        name: Resolve python-dev-standards ref
+        run: echo "ref=${GITHUB_WORKFLOW_REF#*@}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout resolve-deploy-context action
+        uses: actions/checkout@v6.0.3
+        with:
+          repository: cyclops-mrv/python-dev-standards
+          ref: ${{ steps.standards-ref.outputs.ref }}
+          path: _standards
+          sparse-checkout: .github/actions/resolve-deploy-context
+
       - name: Resolve deployment context
         id: resolve
-        uses: ./.github/actions/resolve-deploy-context
+        uses: ./_standards/.github/actions/resolve-deploy-context
         with:
           event_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && 'push' || github.event_name }}
           branch_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref || github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
