@@ -18,86 +18,61 @@ on:
         required: false
         type: string
         default: "3.12"
-      enable_production_deploy:
+      deploy_feature_branches:
         required: false
         type: boolean
-        default: false
+        default: true
+        description: >-
+          When true (default), deploy ephemeral Prefect environments for feature-branch PRs.
+          Set false to skip feature-branch PR deploys (merged PRs and dev→main PRs still deploy).
 
 jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    # PR-only deploy model: no push triggers. Persistent main/dev deploys run on
+    # pull_request closed + merged; review deploys on opened/synchronize/reopened.
+    # Skip feature-branch PRs when deploy_feature_branches is false.
+    if: >-
+      github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+       github.event.action != 'closed' ||
+       github.event.pull_request.merged == true) &&
+      (inputs.deploy_feature_branches ||
+       github.event_name != 'pull_request' ||
+       github.event.action == 'closed' ||
+       github.event.pull_request.head.ref == 'dev')
+    concurrency:
+      group: deploy-${{
+        github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref ||
+        github.event_name == 'pull_request' && github.event.pull_request.head.ref ||
+        github.ref_name }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.3
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
 
+      # Must match the @ref on deploy-prefect-flow.yml in consumer callers (switch to @main together).
       - name: Resolve deployment context
         id: resolve
-        env:
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          if [ -n "${PR_HEAD_REF}" ]; then
-            BRANCH_NAME="${PR_HEAD_REF}"
-          else
-            BRANCH_NAME="${GITHUB_REF_NAME}"
-          fi
-          BRANCH_SLUG="$(echo "${BRANCH_NAME}" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
-            | cut -c1-40)"
-
-          if [ -z "${BRANCH_SLUG}" ]; then
-            BRANCH_SLUG="branch"
-          fi
-
-          COMMIT_HASH="$(git rev-parse --short HEAD)"
-
-          if [ "${BRANCH_NAME}" = "main" ] && [ "${{ inputs.enable_production_deploy }}" = "true" ]; then
-            TARGET_ENV="prod"
-            DEPLOYMENT_NAME_SUFFIX=""
-            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}"
-          elif [ "${BRANCH_NAME}" = "main" ] || [ "${BRANCH_NAME}" = "dev" ]; then
-            TARGET_ENV="staging"
-            DEPLOYMENT_NAME_SUFFIX=""
-            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}"
-          else
-            TARGET_ENV="staging"
-            DEPLOYMENT_NAME_SUFFIX="-${BRANCH_SLUG}"
-            IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}-${BRANCH_SLUG}"
-          fi
-
-          {
-            echo "branch_name=${BRANCH_NAME}"
-            echo "branch_slug=${BRANCH_SLUG}"
-            echo "commit_hash=${COMMIT_HASH}"
-            echo "target_env=${TARGET_ENV}"
-            echo "deployment_name_suffix=${DEPLOYMENT_NAME_SUFFIX}"
-            echo "prefect_pull_branch=${BRANCH_NAME}"
-            echo "image_tag=${IMAGE_TAG}"
-          } >> "${GITHUB_OUTPUT}"
-
-          {
-            echo "docker_tags<<EOF"
-            echo "${IMAGE_TAG}"
-            if [ "${BRANCH_NAME}" = "main" ] && [ "${{ inputs.enable_production_deploy }}" = "true" ]; then
-              echo "${{ inputs.image_name }}:latest"
-            fi
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
+        uses: cyclops-mrv/python-dev-standards/.github/actions/resolve-deploy-context@cyc-1605-refactor-deployment-workflows
+        with:
+          event_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && 'push' || github.event_name }}
+          branch_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref || github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+          image_name: ${{ inputs.image_name }}
 
       - name: Show deployment routing
         run: |
-          echo "target_env=${{ steps.resolve.outputs.target_env }}"
           echo "branch=${{ steps.resolve.outputs.branch_name }}"
           echo "branch_slug=${{ steps.resolve.outputs.branch_slug }}"
+          echo "target_env=${{ steps.resolve.outputs.target_env }}"
           echo "deployment_name_suffix=${{ steps.resolve.outputs.deployment_name_suffix }}"
           echo "image_tag=${{ steps.resolve.outputs.image_tag }}"
 
       - name: Set up Docker Buildx
-        id: buildx
         uses: docker/setup-buildx-action@v4.1.0
 
       - name: Log in to Docker Hub
@@ -115,7 +90,6 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       - name: Build and push image
-        id: build-docker-image
         uses: docker/build-push-action@v7.2.0
         with:
           context: .

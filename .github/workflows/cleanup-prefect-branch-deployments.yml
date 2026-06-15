@@ -1,10 +1,16 @@
 name: Cleanup Prefect branch deployments
 
 on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+      - dev
   workflow_call:
     inputs:
       branch_name:
-        required: true
+        required: false
         type: string
       prefect_file:
         required: false
@@ -18,7 +24,9 @@ on:
 jobs:
   cleanup:
     # Skip main (prod) and dev (persistent staging); other branches get ephemeral deployments.
-    if: inputs.branch_name != 'main' && inputs.branch_name != 'dev'
+    if: >-
+      ${{ (inputs.branch_name || github.event.pull_request.head.ref) != 'main' &&
+          (inputs.branch_name || github.event.pull_request.head.ref) != 'dev' }}
     name: Cleanup staging branch deployments
     runs-on: ubuntu-latest
 
@@ -28,7 +36,7 @@ jobs:
 
       - name: Resolve branch slug
         run: |
-          BRANCH_NAME="${{ inputs.branch_name }}"
+          BRANCH_NAME="${{ inputs.branch_name || github.event.pull_request.head.ref }}"
 
           if [ -z "${BRANCH_NAME}" ]; then
             echo "No branch provided for cleanup. Exiting."

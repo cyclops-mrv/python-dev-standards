@@ -1,0 +1,34 @@
+name: Deploy Prefect flow
+
+# Triggers that drive the routing in deploy-prefect-flow.yml:
+#
+#   PR closed + merged → main: prod, no suffix   (persistent)
+#   PR closed + merged → dev:  staging, no suffix (persistent)
+#   PR (head: dev)     → staging, no suffix   (dev → main review deploy)
+#   PR (head: feature) → staging, with suffix (default; set deploy_feature_branches: false to disable)
+#
+# Do NOT add push to main/dev — persistent deploys run on merged PRs only.
+# Cleanup on PR close is handled by cleanup-prefect-branch-deployments.yml.
+#
+# Do NOT add concurrency here — deploy-prefect-flow.yml serialises deploys at the job level.
+#
+# Pin the @ref below to match resolve-deploy-context in deploy-prefect-flow.yml
+# (currently cyc-1605-refactor-deployment-workflows; switch both to @main when merged).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+      - dev
+
+jobs:
+  deploy:
+    uses: <org>/python-dev-standards/.github/workflows/deploy-prefect-flow.yml@cyc-1605-refactor-deployment-workflows
+    with:
+      image_name: <dockerhub-org>/<image-name>
+      # deploy_feature_branches: false      # default true — opt out of ephemeral PR deploys
+      # dockerfile: deployment/Dockerfile   # default
+      # prefect_file: deployment/prefect.yaml  # default
+      # python_version: "3.12"              # default
+    secrets: inherit
