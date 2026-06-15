@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Tests the routing logic from deploy-prefect-flow.yml against all scenarios
-# defined in ci-cd-routing.csv. Run locally with: bash tests/test-deploy-routing.sh
+# Tests deploy routing via .github/actions/resolve-deploy-context/resolve.sh
+# against all scenarios defined in ci-cd-routing.csv.
+# Run locally with: bash tests/test-deploy-routing.sh
 
 PASS=0
 FAIL=0
+
+RESOLVE_SCRIPT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/.github/actions/resolve-deploy-context/resolve.sh"
+# shellcheck source=.github/actions/resolve-deploy-context/resolve.sh
+source "${RESOLVE_SCRIPT}"
+TEST_IMAGE_NAME="cyclopsai/test-image"
+TEST_COMMIT_HASH="abc1234"
 
 # Models whether the cleanup workflow actually runs for a given PR close event.
 # Gate 1 — trigger branches filter (branches: [main, dev] on pull_request:closed).
@@ -38,14 +45,21 @@ assert_cleanup() {
 
 # Models whether the deploy job in deploy-prefect-flow.yml runs (not skipped).
 # Skips pull_request:synchronize when head is dev — push to dev handles deploy.
+# Skips feature-branch PRs when deploy_feature_branches is false (the default).
 # Args: test_name event_name action head_ref want_runs("true"|"false")
+#       [deploy_feature_branches("true"|"false"), default false]
 assert_deploy_runs() {
   local name="$1" event_name="$2" action="$3" head_ref="$4" want_runs="$5"
+  local deploy_feature_branches="${6:-false}"
 
   local RUNS="true"
   if [ "${action}" = "closed" ]; then
     RUNS="false"
   elif [ "${event_name}" = "pull_request" ] && [ "${head_ref}" = "dev" ] && [ "${action}" = "synchronize" ]; then
+    RUNS="false"
+  elif [ "${deploy_feature_branches}" != "true" ] \
+      && [ "${event_name}" = "pull_request" ] \
+      && [ "${head_ref}" != "dev" ]; then
     RUNS="false"
   fi
 
@@ -68,26 +82,7 @@ assert_routing() {
   local want_env="$4"
   local want_suffix="$5"  # expected DEPLOYMENT_NAME_SUFFIX value
 
-  # ── routing logic (mirrors deploy-prefect-flow.yml) ──────────────────────
-  local BRANCH_SLUG TARGET_ENV DEPLOYMENT_NAME_SUFFIX
-
-  BRANCH_SLUG="$(echo "${branch_name}" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
-    | cut -c1-40)"
-  [ -z "${BRANCH_SLUG}" ] && BRANCH_SLUG="branch"
-
-  if [ "${event_name}" != "pull_request" ]; then
-    [ "${branch_name}" = "main" ] && TARGET_ENV="prod" || TARGET_ENV="staging"
-    DEPLOYMENT_NAME_SUFFIX=""
-  elif [ "${branch_name}" = "dev" ]; then
-    TARGET_ENV="staging"
-    DEPLOYMENT_NAME_SUFFIX=""
-  else
-    TARGET_ENV="staging"
-    DEPLOYMENT_NAME_SUFFIX="-${BRANCH_SLUG}"
-  fi
-  # ── end routing logic ─────────────────────────────────────────────────────
+  resolve_deploy_context "${event_name}" "${branch_name}" "${TEST_IMAGE_NAME}" "${TEST_COMMIT_HASH}"
 
   local ok=true msg=""
   [ "${TARGET_ENV}"           != "${want_env}"    ] && { msg+=" env: got '${TARGET_ENV}', want '${want_env}';";       ok=false; }
@@ -134,6 +129,13 @@ assert_routing "PR: Feature/ABC-123→dev (slug normalisation)" pull_request "Fe
 assert_routing "Direct push to dev"   push         "dev"                  staging ""
 
 echo ""
+echo "Manual dispatch (workflow_dispatch):"
+
+assert_routing "dispatch on feature branch" workflow_dispatch "feature/my-feature" staging "-feature-my-feature"
+assert_routing "dispatch on dev"            workflow_dispatch "dev"                  staging ""
+assert_routing "dispatch on main"           workflow_dispatch "main"                 prod    ""
+
+echo ""
 echo "Double-fire guard (dev→main PR updated: push+synchronize must route identically so cancel-in-progress is safe):"
 
 # When dev is pushed while a dev→main PR is open, GitHub fires BOTH a push to dev
@@ -148,7 +150,13 @@ echo "Deploy job skip (dev→main double-fire — synchronize skipped, push depl
 assert_deploy_runs "push to dev runs deploy"                          push         push          dev                  true
 assert_deploy_runs "pull_request:synchronize dev→main skipped"        pull_request synchronize   dev                  false
 assert_deploy_runs "pull_request:opened dev→main runs deploy"         pull_request opened        dev                  true
-assert_deploy_runs "pull_request feature branch runs deploy"          pull_request synchronize   feature/my-feature   true
+assert_deploy_runs "feature PR skipped (deploy_feature_branches off)" pull_request synchronize   feature/my-feature   false
+
+echo ""
+echo "deploy_feature_branches enabled (ephemeral feature PR deploys):"
+
+assert_deploy_runs "feature PR runs when enabled"                     pull_request synchronize   feature/my-feature   true  true
+assert_deploy_runs "dev→main still runs when enabled"                 pull_request opened        dev                  true  true
 
 echo ""
 echo ""

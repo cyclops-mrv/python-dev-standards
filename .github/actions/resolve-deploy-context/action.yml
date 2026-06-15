@@ -1,0 +1,50 @@
+name: Resolve deployment context
+description: Compute Prefect deploy routing (target env, suffix, image tags)
+
+inputs:
+  event_name:
+    description: GitHub event name (push, pull_request, ...)
+    required: true
+  branch_name:
+    description: Pushed branch (push) or PR head branch (pull_request)
+    required: true
+  image_name:
+    description: Docker image repository name (without tag)
+    required: true
+
+outputs:
+  branch_name:
+    description: Branch used for deploy routing
+    value: ${{ steps.run.outputs.branch_name }}
+  branch_slug:
+    description: Normalised branch slug for ephemeral deployments
+    value: ${{ steps.run.outputs.branch_slug }}
+  commit_hash:
+    description: Short git commit hash
+    value: ${{ steps.run.outputs.commit_hash }}
+  target_env:
+    description: Prefect target environment (prod or staging)
+    value: ${{ steps.run.outputs.target_env }}
+  deployment_name_suffix:
+    description: Suffix appended to deployment names (empty for persistent deploys)
+    value: ${{ steps.run.outputs.deployment_name_suffix }}
+  prefect_pull_branch:
+    description: Branch Prefect pull steps should clone
+    value: ${{ steps.run.outputs.prefect_pull_branch }}
+  image_tag:
+    description: Primary Docker image tag for this deploy
+    value: ${{ steps.run.outputs.image_tag }}
+  docker_tags:
+    description: Newline-separated Docker tags to push
+    value: ${{ steps.run.outputs.docker_tags }}
+
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      run: "${GITHUB_ACTION_PATH}/resolve.sh"
+      env:
+        EVENT_NAME: ${{ inputs.event_name }}
+        BRANCH_NAME: ${{ inputs.branch_name }}
+        IMAGE_NAME: ${{ inputs.image_name }}

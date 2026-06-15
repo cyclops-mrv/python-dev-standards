@@ -5,7 +5,7 @@ name: Deploy Prefect flow
 #   push to main       → prod,    no suffix   (merged PR or direct push)
 #   push to dev        → staging, no suffix   (merged PR or direct push)
 #   PR (head: dev)     → staging, no suffix   (dev → main review deploy)
-#   PR (head: feature) → staging, with suffix (ephemeral branch deploy)
+#   PR (head: feature) → staging, with suffix (only if deploy_feature_branches: true)
 #
 # Do NOT add pull_request type 'closed' here — cleanup is handled
 # automatically by cleanup-prefect-branch-deployments.yml.
@@ -29,6 +29,7 @@ jobs:
     uses: <org>/python-dev-standards/.github/workflows/deploy-prefect-flow.yml@main
     with:
       image_name: <dockerhub-org>/<image-name>
+      # deploy_feature_branches: true       # default false — opt in for ephemeral PR deploys
       # dockerfile: deployment/Dockerfile   # default
       # prefect_file: deployment/prefect.yaml  # default
       # python_version: "3.12"              # default

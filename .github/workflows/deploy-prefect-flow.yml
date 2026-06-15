@@ -18,6 +18,13 @@ on:
         required: false
         type: string
         default: "3.12"
+      deploy_feature_branches:
+        required: false
+        type: boolean
+        default: false
+        description: >-
+          When true, deploy ephemeral Prefect environments for feature-branch PRs.
+          When false (default), only push to main/dev and PRs with head dev deploy.
 
 jobs:
   deploy:
@@ -27,11 +34,15 @@ jobs:
     # pull_request:closed event to prevent a consumer from firing deploy twice on merge.
     # Skip pull_request:synchronize when head is dev — pushing to dev fires both a push
     # event and a synchronize on the dev→main PR; the push run handles deploy.
+    # Skip feature-branch PRs unless deploy_feature_branches is enabled.
     if: >-
       github.event.action != 'closed' &&
       !(github.event_name == 'pull_request' &&
         github.event.pull_request.head.ref == 'dev' &&
-        github.event.action == 'synchronize')
+        github.event.action == 'synchronize') &&
+      (inputs.deploy_feature_branches ||
+       github.event_name != 'pull_request' ||
+       github.event.pull_request.head.ref == 'dev')
     concurrency:
       group: deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
       cancel-in-progress: true
@@ -44,53 +55,11 @@ jobs:
 
       - name: Resolve deployment context
         id: resolve
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          # For PR events use the head branch; for push events use the pushed branch.
-          BRANCH_NAME: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
-        run: |
-          BRANCH_SLUG="$(echo "${BRANCH_NAME}" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
-            | cut -c1-40)"
-          [ -z "${BRANCH_SLUG}" ] && BRANCH_SLUG="branch"
-
-          COMMIT_HASH="$(git rev-parse --short HEAD)"
-
-          if [ "${EVENT_NAME}" != "pull_request" ]; then
-            # Push to main (merged PR or direct) → prod; push to dev → staging.
-            [ "${BRANCH_NAME}" = "main" ] && TARGET_ENV="prod" || TARGET_ENV="staging"
-            DEPLOYMENT_NAME_SUFFIX=""
-          elif [ "${BRANCH_NAME}" = "dev" ]; then
-            # PR from dev (dev → main): deploy to staging without an ephemeral suffix.
-            TARGET_ENV="staging"
-            DEPLOYMENT_NAME_SUFFIX=""
-          else
-            # PR from a feature branch: ephemeral staging deployment with branch suffix.
-            TARGET_ENV="staging"
-            DEPLOYMENT_NAME_SUFFIX="-${BRANCH_SLUG}"
-          fi
-
-          [ -n "${DEPLOYMENT_NAME_SUFFIX}" ] \
-            && IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}-${BRANCH_SLUG}" \
-            || IMAGE_TAG="${{ inputs.image_name }}:${COMMIT_HASH}"
-
-          {
-            echo "branch_name=${BRANCH_NAME}"
-            echo "branch_slug=${BRANCH_SLUG}"
-            echo "commit_hash=${COMMIT_HASH}"
-            echo "target_env=${TARGET_ENV}"
-            echo "deployment_name_suffix=${DEPLOYMENT_NAME_SUFFIX}"
-            echo "prefect_pull_branch=${BRANCH_NAME}"
-            echo "image_tag=${IMAGE_TAG}"
-          } >> "${GITHUB_OUTPUT}"
-
-          {
-            echo "docker_tags<<EOF"
-            echo "${IMAGE_TAG}"
-            [ "${TARGET_ENV}" = "prod" ] && echo "${{ inputs.image_name }}:latest"
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
+        uses: ./.github/actions/resolve-deploy-context
+        with:
+          event_name: ${{ github.event_name }}
+          branch_name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+          image_name: ${{ inputs.image_name }}
 
       - name: Show deployment routing
         run: |
