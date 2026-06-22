@@ -6,6 +6,15 @@ on:
       image_name:
         required: true
         type: string
+      project_dir:
+        required: false
+        type: string
+        default: "."
+        description: >-
+          Directory containing the deployable pyproject.toml. dockerfile and
+          prefect_file are relative to this directory. Use "." for single-project
+          repos (e.g. deployment/Dockerfile under repo root). Prefect deploy uses
+          `uv run --project` from the repository root so monorepo entrypoints resolve.
       dockerfile:
         required: false
         type: string
@@ -30,6 +39,9 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    env:
+      DOCKERFILE_PATH: ${{ inputs.project_dir == '.' && inputs.dockerfile || format('{0}/{1}', inputs.project_dir, inputs.dockerfile) }}
+      PREFECT_FILE_PATH: ${{ inputs.project_dir == '.' && inputs.prefect_file || format('{0}/{1}', inputs.project_dir, inputs.prefect_file) }}
     # PR-only deploy model: no push triggers. Persistent main/dev deploys run on
     # pull_request closed + merged; review deploys on opened/synchronize/reopened.
     # Skip feature-branch PRs when deploy_feature_branches is false.
@@ -49,10 +61,10 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
 
-      # Must match the @ref on deploy-prefect-flow.yml in consumer callers (switch to @main together).
+      # Must match the @ref on deploy-prefect-flow.yml in consumer callers.
       - name: Resolve deployment context
         id: resolve
-        uses: cyclops-mrv/python-dev-standards/.github/actions/resolve-deploy-context@main
+        uses: cyclops-mrv/python-dev-standards/.github/actions/resolve-deploy-context@dev
         with:
           event_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && 'push' || github.event_name }}
           branch_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref || github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
@@ -87,7 +99,9 @@ jobs:
         uses: docker/build-push-action@v7.2.0
         with:
           context: .
-          file: ${{ inputs.dockerfile }}
+          file: ${{ env.DOCKERFILE_PATH }}
+          build-args: |
+            UV_PROJECT=${{ inputs.project_dir }}
           push: true
           tags: ${{ steps.resolve.outputs.docker_tags }}
           cache-from: type=gha
@@ -113,7 +127,7 @@ jobs:
           DEPLOYMENT_NAME_SUFFIX: ${{ steps.resolve.outputs.deployment_name_suffix }}
           PREFECT_PULL_BRANCH: ${{ steps.resolve.outputs.prefect_pull_branch }}
         run: |
-          uv run --only-group deployment \
+          uv run --project "${{ inputs.project_dir }}" --only-group deployment \
             prefect --no-prompt deploy \
-              --prefect-file ${{ inputs.prefect_file }} \
+              --prefect-file "${{ env.PREFECT_FILE_PATH }}" \
               --all
