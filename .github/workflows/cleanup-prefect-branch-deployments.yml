@@ -12,6 +12,10 @@ on:
       branch_name:
         required: false
         type: string
+      project_dir:
+        required: false
+        type: string
+        default: "."
       prefect_file:
         required: false
         type: string
@@ -69,8 +73,9 @@ jobs:
       # Must match the @ref on cleanup-prefect-branch-deployments.yml in consumer callers.
       - name: Resolve deployment identifiers
         id: identifiers
-        uses: cyclops-mrv/python-dev-standards/.github/actions/parse-prefect-deployment-identifiers@main
+        uses: cyclops-mrv/python-dev-standards/.github/actions/parse-prefect-deployment-identifiers@dev
         with:
+          project_dir: ${{ inputs.project_dir }}
           prefect_file: ${{ inputs.prefect_file }}
 
       - name: Delete staging branch deployments
@@ -91,5 +96,6 @@ jobs:
           while IFS=$'\t' read -r FLOW_NAME BASE_NAME; do
             IDENTIFIER="${FLOW_NAME}/${BASE_NAME}-${BRANCH_SLUG}"
             echo "Deleting ${IDENTIFIER}"
-            uv run --only-group deployment prefect --no-prompt deployment delete "${IDENTIFIER}" || true
+            uv run --project "${{ inputs.project_dir }}" --only-group deployment \
+              prefect --no-prompt deployment delete "${IDENTIFIER}" || true
           done <<< "${DEPLOYMENTS}"

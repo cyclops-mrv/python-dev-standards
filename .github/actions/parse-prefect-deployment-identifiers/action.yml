@@ -2,8 +2,12 @@ name: Parse Prefect deployment identifiers
 description: Resolve {flow.name}/{deployment.name} pairs from prefect.yaml entrypoints
 
 inputs:
+  project_dir:
+    description: Directory containing pyproject.toml; prefect_file is relative to this path
+    required: false
+    default: "."
   prefect_file:
-    description: Path to prefect.yaml relative to repository root
+    description: Path to prefect.yaml relative to project_dir
     required: true
     default: deployment/prefect.yaml
 
@@ -19,7 +23,9 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        DEPLOYMENTS="$(uv run --only-group deployment python "${GITHUB_ACTION_PATH}/parse.py" "${{ inputs.prefect_file }}")"
+        PREFECT_FILE="${{ inputs.project_dir == '.' && inputs.prefect_file || format('{0}/{1}', inputs.project_dir, inputs.prefect_file) }}"
+        DEPLOYMENTS="$(uv run --project "${{ inputs.project_dir }}" --only-group deployment \
+          python "${GITHUB_ACTION_PATH}/parse.py" "${PREFECT_FILE}")"
         {
           echo "deployments<<EOF"
           echo "${DEPLOYMENTS}"
