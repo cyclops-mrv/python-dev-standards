@@ -105,7 +105,7 @@ jobs:
           push: true
           tags: ${{ steps.resolve.outputs.docker_tags }}
           cache-from: type=gha,scope=${{ inputs.image_name }}
-          cache-to: type=gha,scope=${{ inputs.image_name }},mode=min
+          cache-to: ${{ (github.event_name != 'pull_request' || github.event.action != 'closed') && format('type=gha,scope={0},mode=min', inputs.image_name) || '' }}
           github-token: ${{ github.token }}
           secrets: |
             github_token=${{ steps.app-token.outputs.token }}
