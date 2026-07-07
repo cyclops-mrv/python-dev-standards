@@ -2,6 +2,12 @@ name: SonarQube
 
 on:
   workflow_call:
+    inputs:
+      project-base-dir:
+        description: "Directory containing sonar-project.properties (relative to repo root)"
+        required: false
+        default: "."
+        type: string
 
 jobs:
   sonarqube:
@@ -13,6 +19,8 @@ jobs:
           fetch-depth: 0
 
       - uses: SonarSource/sonarqube-scan-action@v6
+        with:
+          projectBaseDir: ${{ inputs.project-base-dir }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
