@@ -120,6 +120,13 @@ jobs:
         with:
           version: "latest"
 
+      - name: Auth private git deps over HTTPS
+        env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global url."https://x-access-token:${GH_APP_TOKEN}@github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://x-access-token:${GH_APP_TOKEN}@github.com/".insteadOf "git@github.com:"
+
       - name: Prefect Deploy
         env:
           PREFECT_API_AUTH_STRING: ${{ steps.resolve.outputs.target_env == 'prod' && secrets.PRODUCTION_PREFECT_API_KEY || secrets.PREFECT_API_KEY }}
@@ -132,3 +139,4 @@ jobs:
             prefect --no-prompt deploy \
               --prefect-file "${{ env.PREFECT_FILE_PATH }}" \
               --all
+
