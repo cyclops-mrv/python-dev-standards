@@ -120,12 +120,15 @@ jobs:
         with:
           version: "latest"
 
+      # Rewrite SSH → plain HTTPS; auth via extraheader (not token-in-URL).
       - name: Auth private git deps over HTTPS
         env:
           GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config --global url."https://x-access-token:${GH_APP_TOKEN}@github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://x-access-token:${GH_APP_TOKEN}@github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global http.https://github.com/.extraheader \
+            "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_APP_TOKEN}" | base64 -w 0)"
 
       - name: Prefect Deploy
         env:
