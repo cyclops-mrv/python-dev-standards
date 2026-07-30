@@ -121,6 +121,8 @@ jobs:
           version: "latest"
 
       # Same shell as uv (Dockerfile style): SSH → HTTPS with App token via insteadOf.
+      # Use --add: both insteadOf values share one config key; a plain second
+      # `git config` overwrites the first and drops the ssh:// rewrite uv needs.
       - name: Prefect Deploy
         env:
           GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -130,8 +132,8 @@ jobs:
           DEPLOYMENT_NAME_SUFFIX: ${{ steps.resolve.outputs.deployment_name_suffix }}
           PREFECT_PULL_BRANCH: ${{ steps.resolve.outputs.prefect_pull_branch }}
         run: |
-          git config --global url."https://x-access-token:${GH_APP_TOKEN}@github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://x-access-token:${GH_APP_TOKEN}@github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://x-access-token:${GH_APP_TOKEN}@github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://x-access-token:${GH_APP_TOKEN}@github.com/".insteadOf "git@github.com:"
 
           uv run --project "${{ inputs.project_dir }}" --only-group deployment \
             prefect --no-prompt deploy \
