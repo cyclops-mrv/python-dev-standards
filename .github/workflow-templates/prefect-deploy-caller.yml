@@ -5,6 +5,13 @@ on:
     types: [opened, synchronize, reopened, closed]
     branches: [main, dev]
 
+# Required for the reusable workflow to assume AWS via OIDC.
+# Callers that set a restrictive permissions block (e.g. regenerative_agriculture_monitor)
+# must include id-token: write or OIDC secret fetch will fail.
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     uses: cyclops-mrv/python-dev-standards/.github/workflows/deploy-prefect-flow.yml@dev
@@ -14,4 +21,4 @@ jobs:
       # Workspace monorepo app (RAM-style):
       # project_dir: apps/<app-name>
       # dockerfile and prefect_file default to deployment/Dockerfile and deployment/prefect.yaml
-    secrets: inherit
+    secrets: inherit   # still required for GH_APP_PRIVATE_KEY

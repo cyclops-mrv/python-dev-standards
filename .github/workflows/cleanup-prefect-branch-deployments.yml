@@ -28,11 +28,17 @@ on:
 jobs:
   cleanup:
     # Skip main (prod) and dev (persistent staging); other branches get ephemeral deployments.
+    # Skip fork PRs so OIDC cannot fetch deploy secrets for untrusted heads.
     if: >-
-      ${{ (inputs.branch_name || github.event.pull_request.head.ref) != 'main' &&
+      ${{ (github.event_name != 'pull_request' ||
+           github.event.pull_request.head.repo.full_name == github.repository) &&
+          (inputs.branch_name || github.event.pull_request.head.ref) != 'main' &&
           (inputs.branch_name || github.event.pull_request.head.ref) != 'dev' }}
     name: Cleanup staging branch deployments
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout
@@ -60,6 +66,14 @@ jobs:
           echo "BRANCH_NAME=${BRANCH_NAME}" >> "${GITHUB_ENV}"
           echo "BRANCH_SLUG=${BRANCH_SLUG}" >> "${GITHUB_ENV}"
 
+      # Must match the @ref on cleanup-prefect-branch-deployments.yml in consumer callers.
+      - name: Fetch cleanup secrets from AWS Secrets Manager
+        uses: cyclops-mrv/python-dev-standards/.github/actions/fetch-aws-secrets@dev
+        with:
+          role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
+          secret-ids: |
+            PREFECT_API_AUTH_STRING,prefect/staging-api-auth-string
+
       - name: Setup Python
         uses: actions/setup-python@v6.2.0
         with:
@@ -81,7 +95,7 @@ jobs:
       - name: Delete staging branch deployments
         env:
           DEPLOYMENTS: ${{ steps.identifiers.outputs.deployments }}
-          PREFECT_API_AUTH_STRING: ${{ secrets.PREFECT_API_KEY }}
+          PREFECT_API_AUTH_STRING: ${{ env.PREFECT_API_AUTH_STRING }}
           PREFECT_API_URL: ${{ vars.PREFECT_API_URL }}
         run: |
           set -euo pipefail
