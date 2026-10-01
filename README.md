@@ -347,6 +347,8 @@ Deploy and cleanup workflows read `DOCKERHUB_TOKEN` and `PREFECT_API_AUTH_STRING
 
 Caller workflows must grant `id-token: write` (and usually `contents: read`) so the reusable job can request an OIDC token. If a caller already sets a restrictive `permissions:` block — for example `regenerative_agriculture_monitor` deploy-apps — add `id-token: write` there or OIDC will fail. Keep `secrets: inherit` for `GH_APP_PRIVATE_KEY`.
 
+Deploy and cleanup skip pull requests whose head is a fork (`head.repo.full_name != github.repository`), so untrusted PRs cannot mint an OIDC token to read Secrets Manager.
+
 After all consumer repos are on the updated reusable workflows, retire the legacy `DEPLOY_SSH_KEY` secret and delete GitHub secrets `DOCKER_PWD`, `PREFECT_API_KEY`, and `PRODUCTION_PREFECT_API_KEY`.
 
 ## pyproject.toml

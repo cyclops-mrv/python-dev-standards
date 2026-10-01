@@ -48,8 +48,11 @@ jobs:
     # PR-only deploy model: no push triggers. Persistent main/dev deploys run on
     # pull_request closed + merged; review deploys on opened/synchronize/reopened.
     # Skip feature-branch PRs when deploy_feature_branches is false.
+    # Skip fork PRs so OIDC cannot fetch deploy secrets for untrusted heads.
     if: >-
       github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository) &&
       (github.event_name != 'pull_request' ||
        github.event.action != 'closed' ||
        github.event.pull_request.merged == true) &&

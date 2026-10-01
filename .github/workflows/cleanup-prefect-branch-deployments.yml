@@ -28,8 +28,11 @@ on:
 jobs:
   cleanup:
     # Skip main (prod) and dev (persistent staging); other branches get ephemeral deployments.
+    # Skip fork PRs so OIDC cannot fetch deploy secrets for untrusted heads.
     if: >-
-      ${{ (inputs.branch_name || github.event.pull_request.head.ref) != 'main' &&
+      ${{ (github.event_name != 'pull_request' ||
+           github.event.pull_request.head.repo.full_name == github.repository) &&
+          (inputs.branch_name || github.event.pull_request.head.ref) != 'main' &&
           (inputs.branch_name || github.event.pull_request.head.ref) != 'dev' }}
     name: Cleanup staging branch deployments
     runs-on: ubuntu-latest
