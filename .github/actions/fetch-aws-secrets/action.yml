@@ -1,0 +1,31 @@
+name: Fetch AWS secrets
+description: Assume the GitHub Actions IAM role via OIDC and export Secrets Manager values as env vars
+
+inputs:
+  secret-ids:
+    description: >-
+      Newline-separated list of secret mappings for
+      aws-actions/aws-secretsmanager-get-secrets (e.g. ENV_VAR,secret-name)
+    required: true
+  role-to-assume:
+    description: IAM role ARN to assume via GitHub OIDC
+    required: true
+  aws-region:
+    description: AWS region for Secrets Manager
+    required: false
+    default: us-east-1
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v6.2.4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Get secrets from AWS Secrets Manager
+      uses: aws-actions/aws-secretsmanager-get-secrets@v3.0.1
+      with:
+        secret-ids: ${{ inputs.secret-ids }}
+        parse-json-secrets: false

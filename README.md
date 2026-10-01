@@ -340,9 +340,14 @@ Configure these at the GitHub organization level:
 
 - **Variable** `GH_APP_ID` — GitHub App ID
 - **Secret** `GH_APP_PRIVATE_KEY` — GitHub App private key (PEM)
+- **Variable** `AWS_GHA_ROLE_ARN` — IAM role ARN for GitHub Actions OIDC (`arn:aws:iam::654654573986:role/github-prefect-deploy`). Prefer an org-level Actions variable; repo-level works until that exists.
 - GitHub App installed org-wide with **Contents: Read** access to private repositories
 
-After all consumer repos are migrated, retire the legacy `DEPLOY_SSH_KEY` secret.
+Deploy and cleanup workflows read `DOCKERHUB_TOKEN` and `PREFECT_API_AUTH_STRING` from AWS Secrets Manager (`prefect/dockerhub-token`, `prefect/staging-api-auth-string`, `prefect/production-api-auth-string`) via that role. They no longer use GitHub secrets `DOCKER_PWD`, `PREFECT_API_KEY`, or `PRODUCTION_PREFECT_API_KEY`.
+
+Caller workflows must grant `id-token: write` (and usually `contents: read`) so the reusable job can request an OIDC token. If a caller already sets a restrictive `permissions:` block — for example `regenerative_agriculture_monitor` deploy-apps — add `id-token: write` there or OIDC will fail. Keep `secrets: inherit` for `GH_APP_PRIVATE_KEY`.
+
+After all consumer repos are on the updated reusable workflows, retire the legacy `DEPLOY_SSH_KEY` secret and delete GitHub secrets `DOCKER_PWD`, `PREFECT_API_KEY`, and `PRODUCTION_PREFECT_API_KEY`.
 
 ## pyproject.toml
 
