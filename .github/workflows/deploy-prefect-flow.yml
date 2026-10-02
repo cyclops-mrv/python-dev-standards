@@ -70,7 +70,7 @@ jobs:
       # Must match the @ref on deploy-prefect-flow.yml in consumer callers.
       - name: Resolve deployment context
         id: resolve
-        uses: cyclops-mrv/python-dev-standards/.github/actions/resolve-deploy-context@main
+        uses: cyclops-mrv/python-dev-standards/.github/actions/resolve-deploy-context@dev
         with:
           event_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && 'push' || github.event_name }}
           branch_name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref || github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
@@ -86,7 +86,7 @@ jobs:
 
       # Must match the @ref on deploy-prefect-flow.yml in consumer callers.
       - name: Fetch deploy secrets from AWS Secrets Manager
-        uses: cyclops-mrv/python-dev-standards/.github/actions/fetch-aws-sm@main
+        uses: cyclops-mrv/python-dev-standards/.github/actions/fetch-aws-sm@dev
         with:
           role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
           secret-ids: |
