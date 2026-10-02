@@ -68,7 +68,7 @@ jobs:
 
       # Must match the @ref on cleanup-prefect-branch-deployments.yml in consumer callers.
       - name: Fetch cleanup secrets from AWS Secrets Manager
-        uses: cyclops-mrv/python-dev-standards/.github/actions/fetch-aws-secrets@dev
+        uses: cyclops-mrv/python-dev-standards/.github/actions/fetch-aws-sm@main
         with:
           role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
           secret-ids: |
@@ -87,7 +87,7 @@ jobs:
       # Must match the @ref on cleanup-prefect-branch-deployments.yml in consumer callers.
       - name: Resolve deployment identifiers
         id: identifiers
-        uses: cyclops-mrv/python-dev-standards/.github/actions/parse-prefect-deployment-identifiers@dev
+        uses: cyclops-mrv/python-dev-standards/.github/actions/parse-prefect-deployment-identifiers@main
         with:
           project_dir: ${{ inputs.project_dir }}
           prefect_file: ${{ inputs.prefect_file }}

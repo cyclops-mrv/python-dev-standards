@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   deploy:
-    uses: cyclops-mrv/python-dev-standards/.github/workflows/deploy-prefect-flow.yml@dev
+    uses: cyclops-mrv/python-dev-standards/.github/workflows/deploy-prefect-flow.yml@main
     with:
       image_name: <dockerhub-org>/<image-name>
       # Single-project repo (AGB-style): project_dir defaults to "."
