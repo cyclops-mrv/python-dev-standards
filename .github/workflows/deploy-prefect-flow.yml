@@ -86,7 +86,7 @@ jobs:
 
       # Must match the @ref on deploy-prefect-flow.yml in consumer callers.
       - name: Fetch deploy secrets from AWS Secrets Manager
-        uses: cyclops-mrv/python-dev-standards/.github/actions/fetch-aws-sm@0658b481b117902f1526ae2e2bb158a3b4fec7c7
+        uses: cyclops-mrv/python-dev-standards/.github/actions/fetch-aws-sm@main
         with:
           role-to-assume: ${{ vars.AWS_GHA_ROLE_ARN }}
           secret-ids: |
